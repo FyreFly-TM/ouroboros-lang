@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ouroboros Programming Language - Documentation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="logo">
+            <i class="fas fa-infinity"></i>
+            <h1>Ouroboros</h1>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#introduction" class="active"><i class="fas fa-home"></i> Introduction</a></li>
+            <li><a href="#getting-started"><i class="fas fa-rocket"></i> Getting Started</a></li>
+            <li><a href="#syntax"><i class="fas fa-code"></i> Language Syntax</a></li>
+            <li><a href="#types"><i class="fas fa-shapes"></i> Type System</a></li>
+            <li><a href="#functions"><i class="fas fa-function"></i> Functions</a></li>
+            <li><a href="#variables"><i class="fas fa-box"></i> Variables</a></li>
+            <li><a href="#control-flow"><i class="fas fa-code-branch"></i> Control Flow</a></li>
+            <li><a href="#classes"><i class="fas fa-sitemap"></i> Classes & OOP</a></li>
+            <li><a href="#structs"><i class="fas fa-cubes"></i> Structs</a></li>
+            <li><a href="#operators"><i class="fas fa-calculator"></i> Operators</a></li>
+            <li><a href="#modules"><i class="fas fa-puzzle-piece"></i> Modules</a></li>
+            <li><a href="#graphics"><i class="fas fa-cube"></i> Graphics APIs</a></li>
+            <li><a href="#stdlib"><i class="fas fa-book"></i> Standard Library</a></li>
+            <li><a href="#examples"><i class="fas fa-flask"></i> Examples</a></li>
+            <li><a href="#vs-extension"><i class="fas fa-plug"></i> VS Extension</a></li>
+        </ul>
+        <div class="theme-toggle">
+            <button id="theme-btn" aria-label="Toggle theme">
+                <i class="fas fa-moon"></i>
+            </button>
+        </div>
+    </nav>
+
+    <main class="content">
+        <section id="introduction" class="section">
+            <div class="hero">
+                <h1>Ouroboros Programming Language</h1>
+                <p class="tagline">A modern language with built-in graphics support, static typing, and object-oriented features</p>
+                <div class="hero-buttons">
+                    <a href="#getting-started" class="btn btn-primary">Get Started</a>
+                    <a href="#examples" class="btn btn-secondary">View Examples</a>
+                </div>
+            </div>
+
+            <div class="features">
+                <div class="feature-card">
+                    <i class="fas fa-bolt"></i>
+                    <h3>Fast & Compiled</h3>
+                    <p>Compiles to native code with optimized VM execution</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-cube"></i>
+                    <h3>Graphics Built-in</h3>
+                    <p>Native OpenGL and Vulkan support with voxel engine</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shapes"></i>
+                    <h3>Type System</h3>
+                    <p>Optional static typing with type inference</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-sitemap"></i>
+                    <h3>Object-Oriented</h3>
+                    <p>Classes, inheritance, and modern OOP features</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="getting-started" class="section">
+            <h2><i class="fas fa-rocket"></i> Getting Started</h2>
+            
+            <h3>Installation</h3>
+            <p>Build the Ouroboros compiler from source:</p>
+            <pre><code class="language-bash">git clone https://github.com/ouroboros-lang/ouroboros.git
+cd ouroboros
+
+# On Windows with MinGW
+make
+
+# Or compile manually
+gcc -Wall -Wextra -std=c99 -o ouroc.exe *.c -lgdi32 -lm</code></pre>
+
+            <h3>Hello World</h3>
+            <p>Create your first Ouroboros program:</p>
+            <pre><code class="language-ouroboros">// hello.ouro
+function main() {
+    print("Hello, Ouroboros!");
+    return 0;
+}</code></pre>
+
+            <p>Compile and run:</p>
+            <pre><code class="language-bash">ouroc.exe hello.ouro</code></pre>
+
+            <div class="output-box">
+                <div class="output-header">Output:</div>
+                <pre>Hello, Ouroboros!</pre>
+            </div>
+        </section>
+
+        <section id="syntax" class="section">
+            <h2><i class="fas fa-code"></i> Language Syntax</h2>
+            
+            <h3>Comments</h3>
+            <p>Ouroboros supports both single-line and multi-line comments:</p>
+            <pre><code class="language-ouroboros">// This is a single-line comment
+
+/*
+   This is a
+   multi-line comment
+*/</code></pre>
+
+            <h3>Keywords</h3>
+            <p>Reserved keywords in Ouroboros:</p>
+            <div class="keyword-grid">
+                <span class="keyword">let</span>
+                <span class="keyword">const</span>
+                <span class="keyword">fn</span>
+                <span class="keyword">function</span>
+                <span class="keyword">return</span>
+                <span class="keyword">if</span>
+                <span class="keyword">else</span>
+                <span class="keyword">while</span>
+                <span class="keyword">for</span>
+                <span class="keyword">class</span>
+                <span class="keyword">struct</span>
+                <span class="keyword">new</span>
+                <span class="keyword">this</span>
+                <span class="keyword">extends</span>
+                <span class="keyword">import</span>
+                <span class="keyword">public</span>
+                <span class="keyword">private</span>
+                <span class="keyword">static</span>
+                <span class="keyword">int</span>
+                <span class="keyword">float</span>
+                <span class="keyword">bool</span>
+                <span class="keyword">string</span>
+                <span class="keyword">void</span>
+                <span class="keyword">true</span>
+                <span class="keyword">false</span>
+                <span class="keyword">null</span>
+                <span class="keyword">print</span>
+            </div>
+        </section>
+
+        <section id="types" class="section">
+            <h2><i class="fas fa-shapes"></i> Type System</h2>
+            
+            <h3>Basic Types</h3>
+            <p>Ouroboros supports both typed and untyped variable declarations:</p>
+            <pre><code class="language-ouroboros">// Typed declarations
+int age = 25;
+float pi = 3.14159;
+string name = "Ouroboros";
+bool is_active = true;
+
+// Untyped declarations (dynamic)
+let value = 42;
+let message = "Hello";
+
+// Type inference
+let count = 0;        // Inferred as int
+let ratio = 0.5;      // Inferred as float</code></pre>
+
+            <h3>Arrays</h3>
+            <pre><code class="language-ouroboros">// Array declaration (planned feature)
+int[] numbers = [1, 2, 3, 4, 5];
+string[] names = ["Alice", "Bob", "Charlie"];
+
+// Array access
+let first = numbers[0];
+let last = numbers[4];</code></pre>
+
+            <h3>Type Casting</h3>
+            <pre><code class="language-ouroboros">// String conversion
+let num_str = to_string(42);
+let pi_str = to_string(3.14);
+
+// String concatenation
+let result = "The answer is " + to_string(42);</code></pre>
+        </section>
+
+        <section id="functions" class="section">
+            <h2><i class="fas fa-function"></i> Functions</h2>
+            
+            <h3>Function Declaration</h3>
+            <p>Functions can be typed or untyped:</p>
+            <pre><code class="language-ouroboros">// Untyped function
+function greet(name) {
+    print("Hello, " + name + "!");
+}
+
+// Typed function with return type
+int add(int a, int b) {
+    return a + b;
+}
+
+// Void function
+void display_message(string msg) {
+    print("[INFO] " + msg);
+}
+
+// Function with multiple parameters
+float calculate_area(float width, float height) {
+    return width * height;
+}</code></pre>
+
+            <h3>Function Calls</h3>
+            <pre><code class="language-ouroboros">function main() {
+    greet("Alice");
+    
+    int sum = add(5, 3);
+    print("5 + 3 = " + to_string(sum));
+    
+    float area = calculate_area(10.5, 20.0);
+    print("Area: " + to_string(area));
+    
+    display_message("Program completed");
+    
+    return 0;
+}</code></pre>
+
+            <h3>Recursion</h3>
+            <p>Functions support recursion:</p>
+            <pre><code class="language-ouroboros">int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int fibonacci(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}</code></pre>
+        </section>
+
+        <section id="variables" class="section">
+            <h2><i class="fas fa-box"></i> Variables</h2>
+            
+            <h3>Variable Declaration</h3>
+            <p>Variables can be declared with or without types:</p>
+            <pre><code class="language-ouroboros">// Typed variables
+int x = 10;
+float y = 3.14;
+string name = "Ouroboros";
+bool active = true;
+
+// Let declarations (dynamic)
+let value = 42;
+let message = "Hello";
+
+// Const declarations (immutable)
+const MAX_SIZE = 100;
+const PI = 3.14159;</code></pre>
+
+            <h3>Scope</h3>
+            <p>Variables have block scope:</p>
+            <pre><code class="language-ouroboros">int global_var = 100;  // Global scope
+
+function test_scope() {
+    int function_var = 200;  // Function scope
+    
+    if (true) {
+        int block_var = 300;  // Block scope
+        print(to_string(global_var));    // ✓ Accessible
+        print(to_string(function_var));  // ✓ Accessible
+        print(to_string(block_var));     // ✓ Accessible
+    }
+    
+    print(to_string(function_var));  // ✓ Accessible
+    // print(to_string(block_var));  // ✗ Not accessible
+}</code></pre>
+        </section>
+
+        <section id="control-flow" class="section">
+            <h2><i class="fas fa-code-branch"></i> Control Flow</h2>
+            
+            <h3>If/Else Statements</h3>
+            <pre><code class="language-ouroboros">function check_age(int age) {
+    if (age >= 18) {
+        print("You are an adult");
+    } else {
+        print("You are a minor");
+    }
+    
+    // Else-if chains
+    if (age < 13) {
+        print("Child");
+    } else if (age < 20) {
+        print("Teenager");
+    } else if (age < 60) {
+        print("Adult");
+    } else {
+        print("Senior");
+    }
+}</code></pre>
+
+            <h3>While Loops</h3>
+            <pre><code class="language-ouroboros">function count_down(int n) {
+    while (n > 0) {
+        print(to_string(n));
+        n = n - 1;
+    }
+    print("Blast off!");
+}
+
+function sum_to_n(int n) {
+    int sum = 0;
+    int i = 1;
+    while (i <= n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}</code></pre>
+
+            <h3>For Loops</h3>
+            <pre><code class="language-ouroboros">// For loops (planned feature)
+for (int i = 0; i < 10; i = i + 1) {
+    print(to_string(i));
+}
+
+// For-each loops (planned)
+for (item in collection) {
+    print(item);
+}</code></pre>
+        </section>
+
+        <section id="classes" class="section">
+            <h2><i class="fas fa-sitemap"></i> Classes & Object-Oriented Programming</h2>
+            
+            <h3>Class Declaration</h3>
+            <pre><code class="language-ouroboros">class Person {
+    string name;
+    int age;
+    
+    // Constructor
+    function Person(string n, int a) {
+        this.name = n;
+        this.age = a;
+    }
+    
+    // Method
+    void introduce() {
+        print("Hi, I'm " + this.name + " and I'm " + to_string(this.age) + " years old.");
+    }
+    
+    // Getter
+    int get_age() {
+        return this.age;
+    }
+    
+    // Setter
+    void set_age(int new_age) {
+        if (new_age >= 0) {
+            this.age = new_age;
+        }
+    }
+}</code></pre>
+
+            <h3>Creating Objects</h3>
+            <pre><code class="language-ouroboros">function main() {
+    // Create new instance
+    let person = new Person("Alice", 30);
+    
+    // Call methods
+    person.introduce();
+    
+    // Access properties
+    print("Name: " + person.name);
+    print("Age: " + to_string(person.get_age()));
+    
+    // Modify properties
+    person.set_age(31);
+    person.introduce();
+    
+    return 0;
+}</code></pre>
+
+            <h3>Inheritance</h3>
+            <pre><code class="language-ouroboros">class Student extends Person {
+    string school;
+    float gpa;
+    
+    function Student(string n, int a, string s, float g) {
+        // Call parent constructor
+        super(n, a);
+        this.school = s;
+        this.gpa = g;
+    }
+    
+    void study() {
+        print(this.name + " is studying at " + this.school);
+    }
+    
+    // Override parent method
+    void introduce() {
+        super.introduce();
+        print("I study at " + this.school + " with a GPA of " + to_string(this.gpa));
+    }
+}</code></pre>
+        </section>
+
+        <section id="structs" class="section">
+            <h2><i class="fas fa-cubes"></i> Structs</h2>
+            
+            <h3>Struct Declaration</h3>
+            <p>Structs are lightweight data containers:</p>
+            <pre><code class="language-ouroboros">struct Vector3 {
+    float x;
+    float y;
+    float z;
+}
+
+struct Color {
+    int r;
+    int g;
+    int b;
+    int a;
+}
+
+struct Player {
+    string name;
+    int health;
+    int score;
+    Vector3 position;
+}</code></pre>
+
+            <h3>Using Structs</h3>
+            <pre><code class="language-ouroboros">function main() {
+    // Create struct instances
+    let pos = new Vector3();
+    pos.x = 10.0;
+    pos.y = 20.0;
+    pos.z = 30.0;
+    
+    let color = new Color();
+    color.r = 255;
+    color.g = 128;
+    color.b = 0;
+    color.a = 255;
+    
+    // Nested structs
+    let player = new Player();
+    player.name = "Hero";
+    player.health = 100;
+    player.score = 0;
+    player.position = pos;
+    
+    return 0;
+}</code></pre>
+        </section>
+
+        <section id="operators" class="section">
+            <h2><i class="fas fa-calculator"></i> Operators</h2>
+            
+            <h3>Arithmetic Operators</h3>
+            <table class="operator-table">
+                <thead>
+                    <tr>
+                        <th>Operator</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>+</code></td>
+                        <td>Addition</td>
+                        <td><code>5 + 3</code></td>
+                        <td><code>8</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>-</code></td>
+                        <td>Subtraction</td>
+                        <td><code>10 - 4</code></td>
+                        <td><code>6</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>*</code></td>
+                        <td>Multiplication</td>
+                        <td><code>6 * 7</code></td>
+                        <td><code>42</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/</code></td>
+                        <td>Division</td>
+                        <td><code>20 / 4</code></td>
+                        <td><code>5</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>%</code></td>
+                        <td>Modulo</td>
+                        <td><code>10 % 3</code></td>
+                        <td><code>1</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Comparison Operators</h3>
+            <table class="operator-table">
+                <thead>
+                    <tr>
+                        <th>Operator</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>==</code></td>
+                        <td>Equal to</td>
+                        <td><code>5 == 5</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>!=</code></td>
+                        <td>Not equal to</td>
+                        <td><code>5 != 3</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;</code></td>
+                        <td>Less than</td>
+                        <td><code>3 &lt; 5</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;</code></td>
+                        <td>Greater than</td>
+                        <td><code>5 &gt; 3</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;=</code></td>
+                        <td>Less than or equal</td>
+                        <td><code>3 &lt;= 3</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;=</code></td>
+                        <td>Greater than or equal</td>
+                        <td><code>5 &gt;= 5</code></td>
+                        <td><code>true</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Logical Operators</h3>
+            <pre><code class="language-ouroboros">// AND operator (&&)
+if (age >= 18 && has_license) {
+    print("You can drive");
+}
+
+// OR operator (||)
+if (is_weekend || is_holiday) {
+    print("No work today!");
+}
+
+// NOT operator (!)
+if (!is_raining) {
+    print("Let's go outside");
+}</code></pre>
+
+            <h3>Assignment Operators</h3>
+            <pre><code class="language-ouroboros">int x = 10;     // Basic assignment
+x = x + 5;      // Addition assignment (x becomes 15)
+x = x - 3;      // Subtraction assignment (x becomes 12)
+x = x * 2;      // Multiplication assignment (x becomes 24)
+x = x / 4;      // Division assignment (x becomes 6)
+x = x % 4;      // Modulo assignment (x becomes 2)</code></pre>
+        </section>
+
+        <section id="modules" class="section">
+            <h2><i class="fas fa-puzzle-piece"></i> Modules & Imports</h2>
+            
+            <h3>Creating a Module</h3>
+            <p>Create a file <code>math_utils.ouro</code>:</p>
+            <pre><code class="language-ouroboros">// math_utils.ouro
+int square(int x) {
+    return x * x;
+}
+
+int cube(int x) {
+    return x * x * x;
+}
+
+bool is_even(int n) {
+    return n % 2 == 0;
+}
+
+bool is_prime(int n) {
+    if (n <= 1) {
+        return false;
+    }
+    
+    int i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+float distance(float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    return sqrt(dx * dx + dy * dy);
+}</code></pre>
+
+            <h3>Using Modules</h3>
+            <pre><code class="language-ouroboros">// main.ouro
+import "math_utils";
+
+function main() {
+    int num = 7;
+    
+    print("Square of " + to_string(num) + " = " + to_string(square(num)));
+    print("Cube of " + to_string(num) + " = " + to_string(cube(num)));
+    
+    if (is_even(num)) {
+        print(to_string(num) + " is even");
+    } else {
+        print(to_string(num) + " is odd");
+    }
+    
+    if (is_prime(num)) {
+        print(to_string(num) + " is prime");
+    }
+    
+    return 0;
+}</code></pre>
+
+            <h3>Module Search Paths</h3>
+            <p>Specify additional module search paths:</p>
+            <pre><code class="language-bash"># Add module directories
+ouroc.exe -m ./lib -m ./modules main.ouro
+
+# Multiple file compilation
+ouroc.exe main.ouro math_utils.ouro graphics_lib.ouro</code></pre>
+        </section>
+
+        <section id="graphics" class="section">
+            <h2><i class="fas fa-cube"></i> Graphics Programming</h2>
+            
+            <h3>OpenGL Support</h3>
+            <p>Ouroboros has extensive built-in OpenGL support:</p>
+            <pre><code class="language-ouroboros">function create_opengl_window() {
+    // Initialize OpenGL
+    opengl_init();
+    
+    // Create a window context
+    opengl_create_context(800, 600, "My OpenGL Window");
+    
+    // Create a simple shader
+    int shader = opengl_create_shader(
+        "vertex_shader_source",
+        "fragment_shader_source"
+    );
+    
+    // Main render loop
+    while (opengl_is_context_valid()) {
+        // Clear the screen
+        opengl_clear(0.2, 0.3, 0.3, 1.0);
+        
+        // Use shader program
+        opengl_use_shader(shader);
+        
+        // Draw geometry
+        opengl_draw_arrays(4, 0, 3);  // GL_TRIANGLES
+        
+        // Swap buffers
+        opengl_swap_buffers();
+    }
+    
+    // Cleanup
+    opengl_destroy_context();
+}</code></pre>
+
+            <h3>Vulkan Support</h3>
+            <pre><code class="language-ouroboros">function create_vulkan_renderer() {
+    // Initialize Vulkan
+    vulkan_init();
+    
+    // Create instance
+    vulkan_create_instance("My Vulkan App");
+    
+    // Select physical device
+    vulkan_select_physical_device();
+    
+    // Create logical device
+    vulkan_create_logical_device();
+    
+    // Create window surface
+    vulkan_create_surface(window_handle, 0);
+    
+    // Create swap chain
+    vulkan_create_swapchain(800, 600);
+    
+    // Create render pass
+    vulkan_create_render_pass();
+    
+    // Create graphics pipeline
+    vulkan_create_graphics_pipeline("vertex.spv", "fragment.spv");
+    
+    // Main render loop
+    while (running) {
+        vulkan_draw_frame();
+    }
+    
+    // Cleanup
+    vulkan_cleanup();
+}</code></pre>
+
+            <h3>Voxel Engine</h3>
+            <p>Built-in voxel engine for 3D worlds:</p>
+            <pre><code class="language-ouroboros">function create_voxel_world() {
+    // Create voxel engine
+    voxel_engine_create();
+    
+    // Create a world
+    voxel_create_world("MyWorld", 256, 128, 256);
+    
+    // Generate terrain
+    voxel_generate_terrain("perlin", 0.02, 8);
+    
+    // Set camera position
+    voxel_set_camera(128.0, 80.0, 128.0, 0.0, 0.0);
+    
+    // Enable physics
+    voxel_enable_physics();
+    
+    // Set lighting
+    voxel_set_lighting(1.0, 0.8, 0.6, 30.0);
+    
+    // Main game loop
+    while (running) {
+        // Update camera from input
+        voxel_set_camera(cam_x, cam_y, cam_z, cam_yaw, cam_pitch);
+        
+        // Modify blocks
+        if (mouse_clicked) {
+            voxel_set_block(target_x, target_y, target_z, block_type);
+        }
+        
+        // Render frame
+        voxel_render_frame();
+        
+        // Get performance stats
+        voxel_performance_stats();
+    }
+    
+    // Save world
+    voxel_save_world("MyWorld", "saves/world1.vxl");
+}</code></pre>
+        </section>
+
+        <section id="stdlib" class="section">
+            <h2><i class="fas fa-book"></i> Standard Library</h2>
+            
+            <h3>String Functions</h3>
+            <pre><code class="language-ouroboros">// Convert to string
+string num_str = to_string(42);
+string float_str = to_string(3.14);
+
+// String concatenation
+string full_name = string_concat("John", " Doe");
+
+// String length
+int len = string_length("Hello");
+
+// Print output
+print("Hello, World!");
+print("Value: " + to_string(42));</code></pre>
+
+            <h3>GUI Functions</h3>
+            <pre><code class="language-ouroboros">// Initialize GUI
+init_gui();
+
+// Create window
+draw_window(100, 100, 400, 300, "My Window");
+
+// Add controls
+draw_label(20, 20, "Enter your name:");
+draw_button(20, 60, 100, 30, "Submit");
+
+// Message loop
+gui_message_loop();</code></pre>
+
+            <h3>Networking</h3>
+            <pre><code class="language-ouroboros">// Connect to server
+connect_to_server("192.168.1.100", 8080);
+
+// HTTP requests
+string response = http_get("https://api.example.com/data");
+
+// Event system
+register_event("player_join", "on_player_join");
+trigger_event("player_join", "Alice");</code></pre>
+
+            <h3>Timers & Events</h3>
+            <pre><code class="language-ouroboros">// Set timer
+set_timeout(1000, "timer_callback");
+
+// Register event handlers
+register_event("click", "handle_click");
+register_event("keypress", "handle_keypress");
+
+// Trigger events
+trigger_event("click", "button1");
+trigger_event("keypress", "Enter");</code></pre>
+
+            <h3>Machine Learning (Experimental)</h3>
+            <pre><code class="language-ouroboros">// Create ML engine
+ml_engine_create();
+
+// Train LOD model
+ml_train_lod_model(training_data, 1000);
+
+// Predict performance
+float fps = ml_predict_performance(scene_complexity, view_distance);</code></pre>
+        </section>
+
+        <section id="examples" class="section">
+            <h2><i class="fas fa-flask"></i> Complete Examples</h2>
+            
+            <h3>Calculator Program</h3>
+            <pre><code class="language-ouroboros">// calculator.ouro
+function add(float a, float b) {
+    return a + b;
+}
+
+function subtract(float a, float b) {
+    return a - b;
+}
+
+function multiply(float a, float b) {
+    return a * b;
+}
+
+function divide(float a, float b) {
+    if (b == 0) {
+        print("Error: Division by zero!");
+        return 0;
+    }
+    return a / b;
+}
+
+function main() {
+    print("Simple Calculator");
+    print("================");
+    
+    float x = 10.5;
+    float y = 3.0;
+    
+    print(to_string(x) + " + " + to_string(y) + " = " + to_string(add(x, y)));
+    print(to_string(x) + " - " + to_string(y) + " = " + to_string(subtract(x, y)));
+    print(to_string(x) + " * " + to_string(y) + " = " + to_string(multiply(x, y)));
+    print(to_string(x) + " / " + to_string(y) + " = " + to_string(divide(x, y)));
+    
+    return 0;
+}</code></pre>
+
+            <h3>Object-Oriented Game Entity</h3>
+            <pre><code class="language-ouroboros">// game_entity.ouro
+class Entity {
+    string name;
+    float x;
+    float y;
+    int health;
+    
+    function Entity(string n, float px, float py) {
+        this.name = n;
+        this.x = px;
+        this.y = py;
+        this.health = 100;
+    }
+    
+    void move(float dx, float dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+    
+    void take_damage(int damage) {
+        this.health = this.health - damage;
+        if (this.health < 0) {
+            this.health = 0;
+        }
+    }
+    
+    bool is_alive() {
+        return this.health > 0;
+    }
+    
+    void display() {
+        print(this.name + " at (" + to_string(this.x) + ", " + to_string(this.y) + 
+              ") - Health: " + to_string(this.health));
+    }
+}
+
+class Player extends Entity {
+    int score;
+    int level;
+    
+    function Player(string n) {
+        super(n, 0.0, 0.0);
+        this.score = 0;
+        this.level = 1;
+    }
+    
+    void collect_item(int points) {
+        this.score = this.score + points;
+        print(this.name + " collected item! Score: " + to_string(this.score));
+        
+        // Level up every 100 points
+        if (this.score >= this.level * 100) {
+            this.level = this.level + 1;
+            print("LEVEL UP! Now level " + to_string(this.level));
+        }
+    }
+}
+
+function main() {
+    // Create player
+    let player = new Player("Hero");
+    player.display();
+    
+    // Game simulation
+    player.move(10.0, 5.0);
+    player.collect_item(50);
+    player.take_damage(20);
+    player.display();
+    
+    player.move(5.0, -3.0);
+    player.collect_item(60);
+    player.display();
+    
+    return 0;
+}</code></pre>
+
+            <h3>Graphics Demo</h3>
+            <pre><code class="language-ouroboros">// graphics_demo.ouro
+function draw_rotating_triangle() {
+    opengl_init();
+    opengl_create_context(800, 600, "Rotating Triangle");
+    
+    // Create shader
+    int shader = opengl_create_shader(
+        "#version 330 core\n" +
+        "layout (location = 0) in vec3 aPos;\n" +
+        "uniform float rotation;\n" +
+        "void main() {\n" +
+        "    float c = cos(rotation);\n" +
+        "    float s = sin(rotation);\n" +
+        "    vec3 pos = vec3(aPos.x * c - aPos.y * s, aPos.x * s + aPos.y * c, aPos.z);\n" +
+        "    gl_Position = vec4(pos, 1.0);\n" +
+        "}",
+        "#version 330 core\n" +
+        "out vec4 FragColor;\n" +
+        "void main() {\n" +
+        "    FragColor = vec4(1.0, 0.5, 0.2, 1.0);\n" +
+        "}"
+    );
+    
+    // Triangle vertices
+    float vertices[] = {
+        -0.5, -0.5, 0.0,
+         0.5, -0.5, 0.0,
+         0.0,  0.5, 0.0
+    };
+    
+    // Create vertex buffer
+    int vbo = opengl_create_buffer();
+    opengl_bind_buffer(0x8892, vbo); // GL_ARRAY_BUFFER
+    opengl_buffer_data(0x8892, sizeof(vertices), vertices, 0x88E4); // GL_STATIC_DRAW
+    
+    float rotation = 0.0;
+    
+    // Render loop
+    while (opengl_is_context_valid()) {
+        // Clear
+        opengl_clear(0.2, 0.3, 0.3, 1.0);
+        
+        // Use shader and set uniform
+        opengl_use_shader(shader);
+        opengl_set_uniform_float(shader, "rotation", rotation);
+        
+        // Draw
+        opengl_draw_arrays(4, 0, 3); // GL_TRIANGLES
+        
+        // Update rotation
+        rotation = rotation + 0.01;
+        
+        // Swap buffers
+        opengl_swap_buffers();
+    }
+    
+    opengl_destroy_context();
+}
+
+function main() {
+    draw_rotating_triangle();
+    return 0;
+}</code></pre>
+        </section>
+
+        <section id="vs-extension" class="section">
+            <h2><i class="fas fa-plug"></i> Visual Studio Code Extension</h2>
+            
+            <h3>Features</h3>
+            <ul>
+                <li>✨ Syntax highlighting for Ouroboros files (.ouro)</li>
+                <li>📝 Code snippets for common patterns</li>
+                <li>🎨 Theme integration</li>
+                <li>📁 File icon support</li>
+            </ul>
+
+            <h3>Installation</h3>
+            <ol>
+                <li>Open VS Code</li>
+                <li>Go to Extensions (Ctrl+Shift+X)</li>
+                <li>Search for "Ouroboros Language"</li>
+                <li>Click Install</li>
+            </ol>
+
+            <h3>Manual Installation</h3>
+            <pre><code class="language-bash"># Clone the extension
+git clone https://github.com/ouroboros-lang/vscode-ouroboros
+cd vscode-ouroboros
+
+# Install dependencies
+npm install
+
+# Package the extension
+npm run package
+
+# Install the .vsix file
+code --install-extension ouroboros-language-0.1.0.vsix</code></pre>
+
+            <h3>Snippets</h3>
+            <p>Available code snippets:</p>
+            <ul>
+                <li><code>main</code> - Main function template</li>
+                <li><code>func</code> - Function declaration</li>
+                <li><code>class</code> - Class template</li>
+                <li><code>if</code> - If statement</li>
+                <li><code>while</code> - While loop</li>
+                <li><code>for</code> - For loop</li>
+                <li><code>struct</code> - Struct declaration</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Ouroboros Programming Language. Built with <i class="fas fa-heart"></i> by the community.</p>
+        <p>
+            <a href="https://github.com/ouroboros-lang/ouroboros" target="_blank">
+                <i class="fab fa-github"></i> GitHub
+            </a>
+            <span class="separator">•</span>
+            <a href="https://discord.gg/ouroboros" target="_blank">
+                <i class="fab fa-discord"></i> Discord
+            </a>
+            <span class="separator">•</span>
+            <a href="https://twitter.com/ouroboroslang" target="_blank">
+                <i class="fab fa-twitter"></i> Twitter
+            </a>
+        </p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="prism-ouroboros.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 

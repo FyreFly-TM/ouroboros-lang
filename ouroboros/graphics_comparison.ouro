@@ -1,0 +1,248 @@
+// Graphics API Comparison Example in Ouroboros
+// Demonstrates both OpenGL and Vulkan for comparison
+
+// Helper function to get current time in milliseconds
+function get_time_ms() {
+    return time() * 1000;
+}
+
+// Benchmark function to test rendering performance
+function benchmark_api(api_name, render_function, frames_to_render) {
+    print("Starting " + api_name + " benchmark...");
+    
+    const start_time = get_time_ms();
+    
+    // Call the rendering function
+    const frames_rendered = render_function(frames_to_render);
+    
+    const end_time = get_time_ms();
+    const elapsed_ms = end_time - start_time;
+    const avg_ms_per_frame = elapsed_ms / frames_rendered;
+    const fps = 1000 / avg_ms_per_frame;
+    
+    print(api_name + " benchmark results:");
+    print("  Frames rendered: " + frames_rendered);
+    print("  Total time: " + elapsed_ms + " ms");
+    print("  Average time per frame: " + avg_ms_per_frame.toFixed(2) + " ms");
+    print("  Estimated FPS: " + fps.toFixed(2));
+    
+    return {
+        api: api_name,
+        frames: frames_rendered,
+        total_time_ms: elapsed_ms,
+        ms_per_frame: avg_ms_per_frame,
+        fps: fps
+    };
+}
+
+// OpenGL rendering test
+function test_opengl(max_frames) {
+    print("Initializing OpenGL...");
+    
+    // Initialize OpenGL
+    gl_init();
+    
+    // Create a window
+    gl_create_window(800, 600, "OpenGL Benchmark");
+    
+    // Create a simple shader program
+    const vertex_shader = "
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        layout (location = 1) in vec3 aColor;
+        out vec3 fragColor;
+        
+        void main() {
+            gl_Position = vec4(aPos, 1.0);
+            fragColor = aColor;
+        }
+    ";
+    
+    const fragment_shader = "
+        #version 330 core
+        in vec3 fragColor;
+        out vec4 FragColor;
+        
+        void main() {
+            FragColor = vec4(fragColor, 1.0);
+        }
+    ";
+    
+    const shader_program = gl_create_shader_program(vertex_shader, fragment_shader);
+    
+    // Create a triangle
+    const vertices = [
+        -0.5, -0.5, 0.0,  1.0, 0.0, 0.0,
+         0.5, -0.5, 0.0,  0.0, 1.0, 0.0,
+         0.0,  0.5, 0.0,  0.0, 0.0, 1.0
+    ];
+    
+    const vao = gl_create_vertex_array();
+    const vbo = gl_create_buffer();
+    
+    gl_bind_vertex_array(vao);
+    gl_bind_buffer(vbo, GL_ARRAY_BUFFER);
+    gl_buffer_data(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
+    
+    // Position attribute
+    gl_vertex_attrib_pointer(0, 3, GL_FLOAT, false, 6 * sizeof(float), 0);
+    gl_enable_vertex_attrib_array(0);
+    
+    // Color attribute
+    gl_vertex_attrib_pointer(1, 3, GL_FLOAT, false, 6 * sizeof(float), 3 * sizeof(float));
+    gl_enable_vertex_attrib_array(1);
+    
+    // Main render loop
+    let frame_count = 0;
+    
+    while (frame_count < max_frames && !gl_window_should_close()) {
+        // Clear the screen
+        gl_clear_color(0.2, 0.3, 0.3, 1.0);
+        gl_clear(GL_COLOR_BUFFER_BIT);
+        
+        // Draw the triangle
+        gl_use_shader(shader_program);
+        gl_bind_vertex_array(vao);
+        gl_draw_arrays(GL_TRIANGLES, 0, 3);
+        
+        // Swap buffers and poll events
+        gl_swap_buffers();
+        gl_poll_events();
+        
+        frame_count++;
+    }
+    
+    // Clean up
+    gl_delete_vertex_array(vao);
+    gl_delete_buffer(vbo);
+    gl_delete_shader_program(shader_program);
+    
+    // Terminate OpenGL
+    gl_terminate();
+    
+    return frame_count;
+}
+
+// Vulkan rendering test
+function test_vulkan(max_frames) {
+    print("Initializing Vulkan...");
+    
+    // Initialize Vulkan
+    vk_init();
+    
+    // Create Vulkan instance
+    vk_create_instance("Vulkan Benchmark");
+    
+    // Select physical device
+    vk_select_device();
+    
+    // Create logical device with graphics queue
+    vk_create_device();
+    
+    // Create window and surface
+    const window_handle = vk_create_window(800, 600, "Vulkan Benchmark");
+    vk_create_surface(window_handle);
+    
+    // Create swapchain
+    vk_create_swapchain(800, 600);
+    
+    // Create render pass
+    vk_create_render_pass();
+    
+    // Create framebuffers
+    vk_create_framebuffers();
+    
+    // Create graphics pipeline
+    const vertex_shader = "
+        #version 450
+        layout(location = 0) in vec3 inPosition;
+        layout(location = 1) in vec3 inColor;
+        layout(location = 0) out vec3 fragColor;
+        
+        void main() {
+            gl_Position = vec4(inPosition, 1.0);
+            fragColor = inColor;
+        }
+    ";
+    
+    const fragment_shader = "
+        #version 450
+        layout(location = 0) in vec3 fragColor;
+        layout(location = 0) out vec4 outColor;
+        
+        void main() {
+            outColor = vec4(fragColor, 1.0);
+        }
+    ";
+    
+    vk_create_pipeline(vertex_shader, fragment_shader);
+    
+    // Create vertex buffer
+    const vertices = [
+        -0.5, -0.5, 0.0,  1.0, 0.0, 0.0,
+         0.5, -0.5, 0.0,  0.0, 1.0, 0.0,
+         0.0,  0.5, 0.0,  0.0, 0.0, 1.0
+    ];
+    
+    vk_create_vertex_buffer(vertices);
+    
+    // Create command pool and command buffers
+    vk_create_command_pool();
+    vk_create_command_buffers();
+    
+    // Create synchronization objects
+    vk_create_sync_objects();
+    
+    // Main render loop
+    let frame_count = 0;
+    
+    while (frame_count < max_frames && !vk_window_should_close()) {
+        // Draw frame
+        vk_draw_frame();
+        
+        // Poll window events
+        vk_poll_events();
+        
+        frame_count++;
+    }
+    
+    // Wait for device to finish operations
+    vk_wait_idle();
+    
+    // Clean up resources
+    vk_destroy_sync_objects();
+    vk_destroy_command_pool();
+    vk_destroy_vertex_buffer();
+    vk_destroy_pipeline();
+    vk_destroy_framebuffers();
+    vk_destroy_render_pass();
+    vk_destroy_swapchain();
+    vk_destroy_surface();
+    vk_destroy_device();
+    vk_destroy_instance();
+    
+    return frame_count;
+}
+
+// Main program
+print("=== Ouroboros Graphics API Comparison ===");
+
+// Number of frames to render for each test
+const TEST_FRAMES = 200;
+
+// Run benchmarks
+const opengl_results = benchmark_api("OpenGL", test_opengl, TEST_FRAMES);
+print("\n");
+const vulkan_results = benchmark_api("Vulkan", test_vulkan, TEST_FRAMES);
+
+// Compare results
+print("\n=== Performance Comparison ===");
+const speedup = vulkan_results.fps / opengl_results.fps;
+print("Vulkan is " + speedup.toFixed(2) + "x faster than OpenGL in this test");
+
+// Display a simple chart
+print("\nFPS Comparison:");
+print("OpenGL: " + "=".repeat(Math.floor(opengl_results.fps / 10)) + " " + opengl_results.fps.toFixed(2));
+print("Vulkan: " + "=".repeat(Math.floor(vulkan_results.fps / 10)) + " " + vulkan_results.fps.toFixed(2));
+
+print("\nTest complete!"); 

@@ -1,0 +1,172 @@
+{
+  "name": "Ouroboros",
+  "scopeName": "source.ouroboros",
+  "fileTypes": ["ouro"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#functions" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ouroboros",
+          "begin": "//",
+          "end": "\\n"
+        },
+        {
+          "name": "comment.block.ouroboros",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ouroboros",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ouroboros",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.ouroboros",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ouroboros",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ouroboros",
+          "match": "\\b(if|else|while|for|return|function|import|new|this)\\b"
+        },
+        {
+          "name": "keyword.other.ouroboros",
+          "match": "\\b(let|var|struct|class|void)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.ouroboros",
+          "match": "\\b(int|float|string|bool|T|U)\\b"
+        },
+        {
+          "match": "\\b([A-Z][a-zA-Z0-9_]*)\\b(?!\\s*\\()",
+          "name": "entity.name.type.ouroboros"
+        },
+        {
+          "match": "<([a-zA-Z_][a-zA-Z0-9_]*)>",
+          "captures": {
+            "1": {
+              "name": "storage.type.generic.ouroboros"
+            }
+          }
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "match": "\\b(void|int|float|string|bool|[A-Z][a-zA-Z0-9_]*)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.return.ouroboros"
+            },
+            "2": {
+              "name": "entity.name.function.ouroboros"
+            }
+          }
+        },
+        {
+          "match": "\\bfunction\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.ouroboros"
+            }
+          }
+        },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.ouroboros"
+            }
+          }
+        },
+        {
+          "name": "support.function.ouroboros",
+          "match": "\\b(print|to_string|to_float|sqrt|opengl_init|opengl_create_context|opengl_create_shader|opengl_use_shader|opengl_create_buffer|opengl_bind_buffer|opengl_buffer_data|opengl_draw_arrays|opengl_clear|opengl_swap_buffers|opengl_destroy_context|opengl_is_context_valid)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ouroboros",
+          "match": "\\b([0-9]+(\\.([0-9]+)?)?|\\.[0-9]+)\\b"
+        },
+        {
+          "name": "constant.language.ouroboros",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.ouroboros",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.ouroboros",
+          "match": "\\+|\\-|\\*|\\/|\\%"
+        },
+        {
+          "name": "keyword.operator.logical.ouroboros",
+          "match": "\\!|\\&\\&|\\|\\|"
+        },
+        {
+          "name": "keyword.operator.comparison.ouroboros",
+          "match": "==|!=|>|<|>=|<="
+        },
+        {
+          "name": "keyword.operator.member.ouroboros",
+          "match": "\\."
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=:)",
+          "name": "variable.parameter.ouroboros"
+        },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "name": "variable.other.ouroboros"
+        }
+      ]
+    }
+  }
+} 

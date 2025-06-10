@@ -1,0 +1,20 @@
+// Test int, float and var declarations
+
+function main() {
+    // Define regular variables (existing syntax)
+    let a = 10;
+    let b = 3.14;
+    let c = "hello";
+    
+    // Try using the variables
+    print("a = " + to_string(a));
+    print("b = " + to_string(b));
+    print("c = " + c);
+    
+    // Try to use our new syntax - these might not work yet
+    // int x = 20;
+    // float y = 2.71;
+    // string z = "world";
+    
+    return 0;
+} 

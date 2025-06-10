@@ -1,0 +1,208 @@
+{
+  "Function Declaration": {
+    "prefix": "function",
+    "body": [
+      "function ${1:name}(${2:parameters}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a new function"
+  },
+  "Typed Function": {
+    "prefix": "typedfunction",
+    "body": [
+      "${1:int} ${2:name}(${3:parameters}) {",
+      "\t$0",
+      "\treturn ${4:value};",
+      "}"
+    ],
+    "description": "Create a typed function with return type"
+  },
+  "Void Function": {
+    "prefix": "void",
+    "body": [
+      "void ${1:name}(${2:parameters}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a void function"
+  },
+  "Main Function": {
+    "prefix": "main",
+    "body": [
+      "function main() {",
+      "\t$0",
+      "\treturn 0;",
+      "}"
+    ],
+    "description": "Create a main function"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create an if statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$2",
+      "} else {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create an if-else statement"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a while loop"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (${1:let i = 0}; ${2:i < 10}; ${3:i = i + 1}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a for loop"
+  },
+  "Import Statement": {
+    "prefix": "import",
+    "body": [
+      "import \"${1:module_name}\";"
+    ],
+    "description": "Import a module"
+  },
+  "Struct Declaration": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "\t${2:int} ${3:field1};",
+      "\t${4:float} ${5:field2};",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a struct declaration"
+  },
+  "Class Declaration": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\t${2:int} ${3:field1};",
+      "\t${4:float} ${5:field2};",
+      "\t",
+      "\t// Constructor",
+      "\tvoid ${1:Name}(${6:parameters}) {",
+      "\t\t$0",
+      "\t}",
+      "\t",
+      "\t// Method",
+      "\t${7:returnType} ${8:methodName}(${9:parameters}) {",
+      "\t\t",
+      "\t}",
+      "}"
+    ],
+    "description": "Create a class declaration"
+  },
+  "Generic Class": {
+    "prefix": "genericclass",
+    "body": [
+      "class ${1:Name}<${2:T}> {",
+      "\t${2:T} ${3:field1};",
+      "\t",
+      "\t// Constructor",
+      "\tvoid ${1:Name}() {",
+      "\t\t$0",
+      "\t}",
+      "\t",
+      "\t// Method",
+      "\t${2:T} ${4:methodName}(${5:parameters}) {",
+      "\t\t",
+      "\t}",
+      "}"
+    ],
+    "description": "Create a generic class declaration"
+  },
+  "Variable Declaration": {
+    "prefix": "var",
+    "body": [
+      "${1:int} ${2:name} = ${3:value};"
+    ],
+    "description": "Create a typed variable declaration"
+  },
+  "New Object": {
+    "prefix": "new",
+    "body": [
+      "${1:ClassName} ${2:objectName} = new ${1:ClassName}(${3:parameters});"
+    ],
+    "description": "Create a new object instance"
+  },
+  "OpenGL Initialize": {
+    "prefix": "opengl",
+    "body": [
+      "opengl_init();",
+      "opengl_create_context(${1:800}, ${2:600}, \"${3:Window Title}\");",
+      "",
+      "$0",
+      "",
+      "opengl_destroy_context();"
+    ],
+    "description": "Initialize OpenGL context"
+  },
+  "Shader Program": {
+    "prefix": "shader",
+    "body": [
+      "// Vertex shader",
+      "vertex_shader = \"",
+      "#version 330 core",
+      "layout (location = 0) in vec3 aPos;",
+      "void main() {",
+      "\tgl_Position = vec4(aPos, 1.0);",
+      "}\";",
+      "",
+      "// Fragment shader",
+      "fragment_shader = \"",
+      "#version 330 core",
+      "out vec4 FragColor;",
+      "void main() {",
+      "\tFragColor = vec4(${1:1.0}, ${2:0.5}, ${3:0.2}, ${4:1.0});",
+      "}\";",
+      "",
+      "// Create shader program",
+      "shader = opengl_create_shader(vertex_shader, fragment_shader);",
+      "opengl_use_shader(shader);"
+    ],
+    "description": "Create shader program"
+  },
+  "OpenGL Render Loop": {
+    "prefix": "renderloop",
+    "body": [
+      "running = 1;",
+      "while (running) {",
+      "\t// Clear the screen",
+      "\topengl_clear(${1:0.2}, ${2:0.3}, ${3:0.3}, ${4:1.0});",
+      "\t",
+      "\t// Draw objects",
+      "\t$0",
+      "\t",
+      "\t// Swap buffers",
+      "\topengl_swap_buffers();",
+      "\t",
+      "\t// Check if window is still valid",
+      "\tif (opengl_is_context_valid() == 0) {",
+      "\t\trunning = 0;",
+      "\t}",
+      "}"
+    ],
+    "description": "Create OpenGL render loop"
+  }
+} 
