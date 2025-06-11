@@ -1,4 +1,4 @@
-# Build script for Ouroboros VS Code Extension v0.3.0
+# Build script for Ouroboros VS Code Extension v0.5.0
 
 # Install vsce if not already installed
 if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
@@ -8,12 +8,12 @@ if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
 }
 
 # Create the extension package
-Write-Host "Building Ouroboros VS Code Extension v0.3.0..."
+Write-Host "Building Ouroboros VS Code Extension v0.5.0..."
 npx vsce package
 
 # Rename the package to include version number
 $packagePath = Get-ChildItem -Filter *.vsix | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
-$newName = "ouroboros-language-0.3.0.vsix"
+$newName = "ouroboros-language-0.5.0.vsix"
 if ($packagePath) {
     Rename-Item -Path $packagePath.Name -NewName $newName -Force
     Write-Host "Renamed package to $newName"
