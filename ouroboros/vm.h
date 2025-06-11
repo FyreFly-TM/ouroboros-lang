@@ -2,91 +2,73 @@
 #define VM_H
 
 #include "ast_types.h"
-#include "stack.h"
+#include "stack.h" // For StackFrame
 
-// Property access modifiers
+// Property access modifiers (can be used by AST or VM internals if needed)
 typedef enum {
     ACCESS_PUBLIC,
-    ACCESS_PRIVATE,
-    ACCESS_STATIC
-} AccessModifier;
+    ACCESS_PRIVATE
+    // Note: 'static' is usually a characteristic, not an access modifier like public/private.
+    // A member can be 'static public' or 'static private'.
+} AccessModifierEnum; // Renamed to avoid conflict if AccessModifier is a struct/typedef elsewhere
 
 // Object property structure
 typedef struct ObjectProperty {
     char name[128];
-    char value[1024];
-    AccessModifier access;
-    int is_static;
+    char value[1024]; // Consider dynamic allocation for larger values
+    AccessModifierEnum access; // e.g. ACCESS_PUBLIC, ACCESS_PRIVATE
+    int is_static;          // 0 for instance, 1 for static
     struct ObjectProperty *next;
 } ObjectProperty;
 
 // Object structure
 typedef struct Object {
-    char class_name[128];
+    char class_name[128]; // Format: "ClassName#InstanceID" or "ClassName_static#ID"
     ObjectProperty *properties;
-    struct Object *next;
+    struct Object *next; // For linked list of all objects
 } Object;
 
-// C function type
+// C function pointer type for native functions (if used)
 typedef void (*CFunction)();
 
-// External globals
+// External globals (if needed by other modules, e.g., for debugging)
 extern Object *objects;
+extern char current_class[128]; // Current class context for access checks
 
 // VM initialization and cleanup
 void vm_init();
 void vm_cleanup();
 
-// Function registration
-void register_c_function(const char *name, CFunction func);
-CFunction lookup_c_function(const char *name);
-void register_user_function(ASTNode *func);
-ASTNode* find_user_function(const char *name);
+// Function registration (user-defined from AST)
+void register_user_function(ASTNode *func_node); // Takes ASTNode
+ASTNode* find_user_function(const char *name, const char* class_context_name); // Find by name and optional class
 
 // Object operations
-Object* create_object(const char* class_name);
-void set_object_property(Object *obj, const char *name, const char *value);
-void set_object_property_with_access(Object *obj, const char *name, const char *value, AccessModifier access, int is_static);
-const char* get_object_property(Object *obj, const char *name);
-const char* get_object_property_with_access_check(Object *obj, const char *name, const char *accessing_class);
-const char* get_static_property(const char *class_name, const char *prop_name);
+Object* create_object(const char* class_name); // class_name is base name e.g. "MyClass"
+void set_object_property(Object *obj, const char *name, const char *value); // Basic public setter
+void set_object_property_with_access(Object *obj, const char *name, const char *value, AccessModifierEnum access, int is_static);
+const char* get_object_property(Object *obj, const char *name); // Basic public getter
+const char* get_object_property_with_access_check(Object *obj, const char *name, const char *accessing_class_context);
+const char* get_static_property(const char *class_name, const char *prop_name); // Gets from ClassName_static object
 void free_object(Object *obj);
+Object* find_object_by_id(int id);
+Object* find_static_class_object(const char *class_name); // Finds/creates ClassName_static object
+void initialize_test_class(Object *obj); // Specific initializer, maybe remove/generalize
+const char* get_object_property_with_access(Object *obj, const char *property_name, const char *current_class_context_for_access_check);
+
 
 // VM execution
-const char* execute_function_call(const char *name, ASTNode *args, StackFrame *frame);
+const char* execute_function_call(const char *qualified_name, ASTNode *args_ast_list, StackFrame *caller_frame);
 void run_vm_node(ASTNode *node, StackFrame *frame);
-void run_vm(ASTNode *root);
+void run_vm(ASTNode *root_ast_node);
 
 // Return value handling
 const char* get_return_value();
 void set_return_value(const char* value);
 
-// Function declarations
-void init_vm();
-void run_vm(ASTNode *program_node);
-void run_vm_node(ASTNode *node, StackFrame *frame);
-StackFrame* create_stack_frame(const char *function_name, StackFrame *parent);
-void destroy_stack_frame(StackFrame *frame);
-void set_variable(StackFrame *frame, const char *name, const char *value);
-const char* get_variable(StackFrame *frame, const char *name);
-void set_return_value(const char *value);
-const char* get_return_value();
-void print_stack_trace();
-Object* create_object(const char *class_name);
-void set_object_property_with_access(Object *obj, const char *name, const char *value, AccessModifier access, int is_static);
-const char* get_object_property_with_access_check(Object *obj, const char *name, const char *accessing_class);
-const char* execute_function_call(const char *name, ASTNode *args, StackFrame *frame);
-Object* find_object_by_id(int id);
-Object* find_static_class_object(const char *class_name);
-const char* evaluate_member_access(ASTNode *expr, StackFrame *frame);
-const char* call_built_in_function(const char* func_name, ASTNode* args, StackFrame* frame);
+// Bridge to stdlib built-in functions (defined in stdlib.c)
+// Arguments: func_name, list of ASTNodes for args, frame to evaluate args in.
+const char* call_built_in_function(const char* func_name_to_call, ASTNode* args_ast_list, StackFrame* frame_for_evaluating_args);
 
-// Object management functions
-Object* create_object(const char *class_name);
-Object* find_object_by_id(int id);
-Object* find_static_class_object(const char *class_name);
-void initialize_test_class(Object *obj);
-const char* get_object_property_with_access(Object *obj, const char *property_name, const char *current_class_context);
-void set_object_property_with_access(Object *obj, const char *property_name, const char *value, AccessModifier access, int is_static);
 
 #endif // VM_H

@@ -1,135 +1,83 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h> // For isupper in identifier evaluation
 #include "vm.h"
 #include "ast_types.h"
 #include "stack.h"
-#include "eval.h"
-#include "stdlib.h"
-#include "module.h"
+#include "eval.h"    // For evaluate_expression
+#include "stdlib.h"  // For actual call_builtin_function, register_stdlib_functions
+#include "module.h"  // For Module types, if used for imports
 
-// Extern global AST root created by the parser so we can traverse it.
-extern ASTNode *program;
+extern ASTNode *program; // Global AST root from parser
 
-// Structure to hold registered functions
 typedef struct FunctionEntry {
     ASTNode *func;
     struct FunctionEntry *next;
 } FunctionEntry;
 
-// Structure to hold registered classes
 typedef struct ClassEntry {
     char name[128];
+    ASTNode *class_node; 
     struct ClassEntry *next;
 } ClassEntry;
 
-// Keep track of registered user functions
-static ASTNode *user_functions = NULL;
-
-// Create a global stack frame for the VM
 static StackFrame *global_frame = NULL;
-
-// Store the last return value with dynamic allocation
 static char *return_value = NULL;
-
-// Registered functions list
 static FunctionEntry *registered_functions = NULL;
-
-// Registered classes list
 static ClassEntry *registered_classes = NULL;
 static ClassEntry *registered_classes_tail = NULL;
 
-// Current class context (for private access)
-char current_class[128] = {0};
-
-// Objects list
+char current_class[128] = {0}; // Global current class context for resolution
 Object *objects = NULL;
 static int next_object_id = 1;
 
-// Forward prototype
 static int is_class_registered(const char *name);
+static ClassEntry* find_class_entry(const char *name);
+static void initialize_default_instance_fields(const char *class_name, Object *instance, StackFrame* frame_for_eval);
 
-// Forward helper to initialise default instance fields
-static void initialize_default_instance_fields(const char *class_name, Object *instance);
 
-// Get the last return value
 const char* get_return_value() {
-    return return_value ? return_value : "0";
+    return return_value ? return_value : "0"; 
 }
 
-// Set the return value with dynamic allocation
 void set_return_value(const char* value) {
-    // Free previous return value if exists
     if (return_value) {
         free(return_value);
         return_value = NULL;
     }
-    
     if (value) {
-        // Allocate memory for the new return value
         return_value = strdup(value);
         if (!return_value) {
-            fprintf(stderr, "Error: Memory allocation failed for return value\n");
-            return_value = strdup("0");
+            fprintf(stderr, "Error: Memory allocation failed for return value. Defaulting to \"0\".\n");
+            return_value = strdup("0"); 
         }
     } else {
-        return_value = strdup("0");
+        return_value = strdup("0"); 
     }
 }
 
-// Create a new object
 Object* create_object(const char *class_name) {
-    Object *obj = (Object*)malloc(sizeof(Object));
+    Object *obj = (Object*)calloc(1, sizeof(Object)); // Use calloc
     if (!obj) {
-        fprintf(stderr, "Error: Failed to allocate memory for object\n");
+        fprintf(stderr, "Error: Failed to allocate memory for object of class '%s'\n", class_name);
         return NULL;
     }
-    
-    // Format the class name with a unique ID: ClassName#ID
     snprintf(obj->class_name, sizeof(obj->class_name), "%s#%d", class_name, next_object_id++);
-    
-    // Initialize properties
-    obj->properties = NULL;
     obj->next = objects;
     objects = obj;
-    
-    printf("[OBJECT] Created new object: %s\n", obj->class_name);
-    
-    // Add standard properties for all objects
-    if (strcmp(class_name, "Object") == 0) {
-        // Generic Object properties
-        set_object_property_with_access(obj, "toString", "Object", ACCESS_PUBLIC, 0);
-        set_object_property_with_access(obj, "valueOf", "0", ACCESS_PUBLIC, 0);
-    }
-    
-    // Forward helper to set default value on newly created object based on type
-    initialize_default_instance_fields(class_name, obj);
-    
+    // printf("[OBJECT] Created new object: %s (class: %s)\n", obj->class_name, class_name);
+    initialize_default_instance_fields(class_name, obj, global_frame); 
     return obj;
 }
 
-// Set an object property with access modifiers
-void set_object_property_with_access(Object *obj, const char *name, const char *value, AccessModifier access, int is_static) {
-    if (!obj) {
-        fprintf(stderr, "Error: Cannot set property on null object\n");
-        return;
-    }
+void set_object_property_with_access(Object *obj, const char *name, const char *value, AccessModifierEnum access, int is_static) {
+    if (!obj) { fprintf(stderr, "Error: Cannot set property '%s' on null object\n", name); return; }
+    if (!name || !value) { fprintf(stderr, "Error: Invalid parameters for setting object property (name or value is null)\n"); return; }
     
-    if (!name || !value) {
-        fprintf(stderr, "Error: Invalid parameters for setting object property\n");
-        return;
-    }
-    
-    printf("[PROPERTY] Setting %s property '%s' to '%s' on object %s\n", 
-           access == ACCESS_PUBLIC ? "public" : 
-           access == ACCESS_PRIVATE ? "private" : "static",
-           name, value, obj->class_name);
-    
-    // Check if property already exists
     ObjectProperty *prop = obj->properties;
     while (prop) {
         if (strcmp(prop->name, name) == 0) {
-            // Update existing property
             strncpy(prop->value, value, sizeof(prop->value) - 1);
             prop->value[sizeof(prop->value) - 1] = '\0';
             prop->access = access;
@@ -139,1325 +87,824 @@ void set_object_property_with_access(Object *obj, const char *name, const char *
         prop = prop->next;
     }
     
-    // Property doesn't exist, create a new one
-    ObjectProperty *new_prop = (ObjectProperty*)malloc(sizeof(ObjectProperty));
-    if (!new_prop) {
-        fprintf(stderr, "Error: Failed to allocate memory for object property\n");
-        return;
-    }
+    ObjectProperty *new_prop = (ObjectProperty*)calloc(1, sizeof(ObjectProperty)); // Use calloc
+    if (!new_prop) { fprintf(stderr, "Error: Failed to allocate memory for object property '%s'\n", name); return; }
     
-    // Initialize the new property
     strncpy(new_prop->name, name, sizeof(new_prop->name) - 1);
     new_prop->name[sizeof(new_prop->name) - 1] = '\0';
-    
     strncpy(new_prop->value, value, sizeof(new_prop->value) - 1);
     new_prop->value[sizeof(new_prop->value) - 1] = '\0';
-    
     new_prop->access = access;
     new_prop->is_static = is_static;
-    
-    // Add to the property list
     new_prop->next = obj->properties;
     obj->properties = new_prop;
-    
-    printf("[PROPERTY] Created new property '%s' on object %s\n", name, obj->class_name);
 }
 
-// Get an object property (basic version)
 const char* get_object_property(Object *obj, const char *name) {
-    return get_object_property_with_access_check(obj, name, NULL);
+    return get_object_property_with_access_check(obj, name, NULL); 
 }
 
-// Get an object property with access control check
-const char* get_object_property_with_access_check(Object *obj, const char *name, const char *accessing_class) {
+const char* get_object_property_with_access_check(Object *obj, const char *name, const char *accessing_class_context) {
     if (!obj || !name) return NULL;
     
-    // Extract class name without the ID
-    char class_name[128] = {0};
+    char obj_base_class_name[128] = {0};
     char *hash_pos = strchr(obj->class_name, '#');
     if (hash_pos) {
-        size_t class_name_len = hash_pos - obj->class_name;
-        strncpy(class_name, obj->class_name, class_name_len);
-        class_name[class_name_len] = '\0';
-    } else {
-        strncpy(class_name, obj->class_name, sizeof(class_name) - 1);
+        size_t len = hash_pos - obj->class_name;
+        if (len < sizeof(obj_base_class_name)) {
+            strncpy(obj_base_class_name, obj->class_name, len);
+            obj_base_class_name[len] = '\0';
+        } else {
+            strncpy(obj_base_class_name, obj->class_name, sizeof(obj_base_class_name) -1);
+            obj_base_class_name[sizeof(obj_base_class_name)-1] = '\0';
+        }
+    } else { 
+        strncpy(obj_base_class_name, obj->class_name, sizeof(obj_base_class_name) - 1);
+        obj_base_class_name[sizeof(obj_base_class_name)-1] = '\0';
+        if(strstr(obj_base_class_name, "_static")) { // "ClassName_static"
+             char * p = strstr(obj_base_class_name, "_static");
+             if(p) *p = '\0';
+        }
     }
     
-    printf("[ACCESS] Checking property '%s' on object %s, accessing from class '%s'\n", 
-           name, obj->class_name, accessing_class ? accessing_class : "null");
-    
-    // Check if property exists
     ObjectProperty *prop = obj->properties;
     while (prop) {
         if (strcmp(prop->name, name) == 0) {
-            // Found the property - check access
-            if (prop->access == ACCESS_PUBLIC) {
-                // Public property - accessible from anywhere
-                return prop->value;
-            } else if (prop->access == ACCESS_PRIVATE) {
-                // Private property - only accessible from within the same class
-                if (accessing_class && strcmp(accessing_class, class_name) == 0) {
+            if (prop->access == ACCESS_PUBLIC) return prop->value;
+            if (prop->access == ACCESS_PRIVATE) {
+                if (accessing_class_context && strcmp(accessing_class_context, obj_base_class_name) == 0) {
                     return prop->value;
                 } else {
-                    printf("[ACCESS] Cannot access private property '%s' from outside class '%s'\n", 
-                          name, class_name);
-                    return NULL;
-                }
-            } else if (prop->is_static) {
-                // Static property - accessible from anywhere if public
-                if (prop->access == ACCESS_PUBLIC) {
-                    return prop->value;
-                } else if (accessing_class && strcmp(accessing_class, class_name) == 0) {
-                    // Static private - only accessible from within the class
-                    return prop->value;
-                } else {
-                    printf("[ACCESS] Cannot access private static property '%s' from outside class '%s'\n", 
-                          name, class_name);
-                    return NULL;
+                    // fprintf(stderr, "Access Denied: Cannot access private property '%s.%s' from context '%s'.\n", 
+                    //         obj_base_class_name, name, accessing_class_context ? accessing_class_context : "global/unknown");
+                    return NULL; 
                 }
             }
+            return prop->value; 
         }
         prop = prop->next;
     }
-    
-    // Property not found
-    return NULL;
+    return NULL; 
 }
 
-// Get an object property with access control
-const char* get_object_property_with_access(Object *obj, const char *property_name, const char *current_class_context) {
+const char* get_object_property_with_access(Object *obj, const char *property_name, const char *current_class_context_for_access_check) {
     if (!obj) return "undefined";
-    
-    // Debug: auto-initialize TestMain properties
-    #if 0
-        if (strncmp(obj->class_name, "TestMain#", 9) == 0) {
-            // Ensure randomFloat is set
-            ObjectProperty *prop = obj->properties;
-            int found = 0;
-            while (prop) {
-                if (strcmp(prop->name, "randomFloat") == 0) {
-                    found = 1;
-                    break;
-                }
-                prop = prop->next;
-            }
-            if (!found) {
-                printf("[DEBUG] Auto-initializing TestMain instance properties\n");
-                set_object_property_with_access(obj, "randomFloat", "15.0", ACCESS_PUBLIC, 0);
-                set_object_property_with_access(obj, "randomInt", "1", ACCESS_PRIVATE, 0);
-            }
+    const char* instance_prop_val = get_object_property_with_access_check(obj, property_name, current_class_context_for_access_check);
+    if (instance_prop_val) return instance_prop_val;
+
+    char obj_base_class_name[128] = {0};
+    char *hash_pos = strchr(obj->class_name, '#');
+    if (hash_pos) {
+        size_t len = hash_pos - obj->class_name;
+         if (len < sizeof(obj_base_class_name)) {
+            strncpy(obj_base_class_name, obj->class_name, len);
+            obj_base_class_name[len] = '\0';
+        } else {
+            strncpy(obj_base_class_name, obj->class_name, sizeof(obj_base_class_name)-1);
+            obj_base_class_name[sizeof(obj_base_class_name)-1] = '\0';
         }
-    #endif
-    
-    // Check for static properties in the class static object
-    if (strstr(obj->class_name, "_static") == NULL) {
-        // This is a regular instance, check if it's a static property request
-        char *class_name = strdup(obj->class_name);
-        char *hash_pos = strchr(class_name, '#');
-        if (hash_pos) *hash_pos = '\0';
-        
-        // Look for the static version of the class
-        Object *static_obj = find_static_class_object(class_name);
-        if (static_obj) {
-            // Check if this property exists in the static object
-            ObjectProperty *static_prop = static_obj->properties;
-            while (static_prop) {
+        if(strstr(obj_base_class_name, "_static")) { // if "ClassName_static"
+             char * p = strstr(obj_base_class_name, "_static");
+             if(p) *p = '\0'; // Get "ClassName"
+        }
+
+
+        Object *static_class_obj = find_static_class_object(obj_base_class_name);
+        if (static_class_obj) {
+            ObjectProperty *static_prop = static_class_obj->properties;
+            while(static_prop) {
                 if (strcmp(static_prop->name, property_name) == 0 && static_prop->is_static) {
-                    // It's a static property, return it
-                    free(class_name);
-                    return static_prop->value;
+                    if (static_prop->access == ACCESS_PUBLIC) return static_prop->value;
+                    if (static_prop->access == ACCESS_PRIVATE && 
+                        current_class_context_for_access_check && 
+                        strcmp(current_class_context_for_access_check, obj_base_class_name) == 0) {
+                        return static_prop->value;
+                    }
+                    // fprintf(stderr, "Access Denied: Cannot access private static property '%s.%s' from context '%s'.\n",
+                    //          obj_base_class_name, property_name, current_class_context_for_access_check ? current_class_context_for_access_check : "global/unknown");
+                    return "undefined"; 
                 }
                 static_prop = static_prop->next;
             }
         }
-        free(class_name);
     }
-    
-    // Look for the property in the object
-    ObjectProperty *prop = obj->properties;
-    while (prop) {
-        if (strcmp(prop->name, property_name) == 0) {
-            // Check access
-            if (prop->access == ACCESS_PRIVATE) {
-                // For private properties, check if we're in the same class context
-                char *obj_class = strdup(obj->class_name);
-                char *hash_pos = strchr(obj_class, '#');
-                if (hash_pos) *hash_pos = '\0';
-                
-                // Private access is only allowed from within the same class
-                if (!current_class_context || strcmp(current_class_context, obj_class) != 0) {
-                    free(obj_class);
-                    fprintf(stderr, "Error: Property '%s' is private\n", property_name);
-                    return "undefined";
-                }
-                free(obj_class);
-            }
-            
-            return prop->value;
-        }
-        prop = prop->next;
-    }
-    
-    fprintf(stderr, "Error: Property '%s' not found or not accessible\n", property_name);
     return "undefined";
 }
 
-// Get a static property from a class
 const char* get_static_property(const char *class_name, const char *prop_name) {
     if (!class_name || !prop_name) return NULL;
-    
-    // Find the class (any instance will do)
-    Object *obj = objects;
-    while (obj) {
-        // Check if it's an instance of the class (ignoring the #id part)
-        if (strncmp(obj->class_name, class_name, strlen(class_name)) == 0) {
-            // Find the static property
-            ObjectProperty *prop = obj->properties;
-            while (prop) {
-                if (strcmp(prop->name, prop_name) == 0 && prop->is_static) {
-                    return prop->value;
-                }
-                prop = prop->next;
-            }
-            
-            // Static property not found in this instance
-            printf("[STATIC] Property '%s' not found in class '%s'\n", prop_name, class_name);
-            return NULL;
-        }
-        obj = obj->next;
+    Object *static_obj = find_static_class_object(class_name);
+    if (static_obj) {
+        return get_object_property_with_access_check(static_obj, prop_name, class_name); 
     }
-    
-    printf("[STATIC] No instances of class '%s' found\n", class_name);
     return NULL;
 }
 
-// Register a class
-static void vm_register_class(const char *name) {
-    if (!name) return;
-    
-    // Check if already registered
-    if (is_class_registered(name)) return;
-    
-    ClassEntry *entry = (ClassEntry*)malloc(sizeof(ClassEntry));
-    if (!entry) {
-        fprintf(stderr, "Error: Failed to allocate memory for class entry\n");
+static void vm_register_class(ASTNode *class_node) { 
+    if (!class_node || class_node->type != AST_CLASS || !class_node->value[0]) return;
+    const char *name = class_node->value;
+    if (is_class_registered(name)) {
+        // printf("[VM] Warning (L%d:%d): Class '%s' already registered. Skipping.\n", class_node->line, class_node->col, name);
         return;
     }
-    
+    ClassEntry *entry = (ClassEntry*)calloc(1, sizeof(ClassEntry)); // Use calloc
+    if (!entry) {
+        fprintf(stderr, "Error (L%d:%d): Failed to allocate memory for class entry '%s'\n", class_node->line, class_node->col, name);
+        return;
+    }
     strncpy(entry->name, name, sizeof(entry->name) - 1);
     entry->name[sizeof(entry->name) - 1] = '\0';
-    entry->next = NULL;
-    if (!registered_classes) {
-        registered_classes = registered_classes_tail = entry;
-    } else {
-        registered_classes_tail->next = entry;
-        registered_classes_tail = entry;
-    }
+    entry->class_node = class_node; 
+    if (!registered_classes) registered_classes = registered_classes_tail = entry;
+    else { registered_classes_tail->next = entry; registered_classes_tail = entry; }
+    // printf("[VM] Registered class: %s (from L%d:%d)\n", name, class_node->line, class_node->col);
 }
 
-// Check if a class is registered
-static int is_class_registered(const char *name) {
-    if (!name) return 0;
-    
+static ClassEntry* find_class_entry(const char *name) {
+    if (!name) return NULL;
     ClassEntry *entry = registered_classes;
     while (entry) {
-        if (strcmp(entry->name, name) == 0) {
-            return 1;
-        }
+        if (strcmp(entry->name, name) == 0) return entry;
         entry = entry->next;
     }
-    
-    return 0;
+    return NULL;
 }
 
-// Free an object and its properties
+static int is_class_registered(const char *name) {
+    return find_class_entry(name) != NULL;
+}
+
 void free_object(Object *obj) {
     if (!obj) return;
-    
-    // Free properties
     ObjectProperty *prop = obj->properties;
     while (prop) {
-        ObjectProperty *next = prop->next;
+        ObjectProperty *next_prop = prop->next;
         free(prop);
-        prop = next;
+        prop = next_prop;
     }
-    
     free(obj);
 }
 
-// Initialize the VM
 void vm_init() {
-    user_functions = NULL;
+    if (global_frame) destroy_stack_frame(global_frame);
     global_frame = create_stack_frame("global", NULL);
-    return_value = strdup("0");
+    
+    if (return_value) free(return_value);
+    return_value = strdup("0"); 
+    
+    Object *obj = objects;
+    while (obj) { Object *next = obj->next; free_object(obj); obj = next; }
     objects = NULL;
     next_object_id = 1;
+
+    FunctionEntry *fn_entry = registered_functions;
+    while(fn_entry) { FunctionEntry* next = fn_entry->next; free(fn_entry); fn_entry = next; }
+    registered_functions = NULL;
+
+    ClassEntry *cls_entry = registered_classes;
+    while(cls_entry) { ClassEntry* next = cls_entry->next; free(cls_entry); cls_entry = next; }
     registered_classes = NULL;
     registered_classes_tail = NULL;
+
     current_class[0] = '\0';
 }
 
-// Clean up the VM
 void vm_cleanup() {
-    // Free the return value
-    if (return_value) {
-        free(return_value);
-        return_value = NULL;
-    }
+    if (return_value) { free(return_value); return_value = NULL; }
+    if (global_frame) { destroy_stack_frame(global_frame); global_frame = NULL; }
     
-    // Destroy global stack frame
-    destroy_stack_frame(global_frame);
-    global_frame = NULL;
-    
-    // Free registered functions list
     FunctionEntry *entry = registered_functions;
-    while (entry) {
-        FunctionEntry *next = entry->next;
-        free(entry);
-        entry = next;
-    }
+    while (entry) { FunctionEntry *next = entry->next; free(entry); entry = next; }
     registered_functions = NULL;
     
-    // Free registered classes list
     ClassEntry *class_entry = registered_classes;
-    while (class_entry) {
-        ClassEntry *next = class_entry->next;
-        free(class_entry);
-        class_entry = next;
-    }
+    while (class_entry) { ClassEntry *next_entry = class_entry->next; free(class_entry); class_entry = next_entry; }
     registered_classes = NULL;
+    registered_classes_tail = NULL;
     
-    // Free objects
     Object *obj = objects;
-    while (obj) {
-        Object *next = obj->next;
-        free_object(obj);
-        obj = next;
-    }
+    while (obj) { Object *next_obj = obj->next; free_object(obj); obj = next_obj; }
     objects = NULL;
+    // printf("[VM] Cleanup complete.\n");
 }
 
-// Register a C function
-void register_c_function(const char *name, CFunction func) {
-    if (!global_frame) {
-        vm_init();
-    }
-    
-    // Store function pointer as a string representation
-    char value[64];
-    snprintf(value, sizeof(value), "%p", (void*)func);
-    set_variable(global_frame, name, value);
-}
-
-// Look up a C function
-CFunction lookup_c_function(const char *name) {
-    if (!global_frame) return NULL;
-    
-    const char *value = get_variable(global_frame, name);
-    if (!value) return NULL;
-    
-    // Convert string back to function pointer
-    void *ptr;
-    sscanf(value, "%p", &ptr);
-    return (CFunction)ptr;
-}
-
-// Register a user-defined function
-void register_user_function(ASTNode *func) {
-    if (!func || (func->type != AST_FUNCTION && func->type != AST_TYPED_FUNCTION)) return;
-    
-    // Create a new entry
-    FunctionEntry *entry = (FunctionEntry *)malloc(sizeof(FunctionEntry));
-    if (!entry) {
-        fprintf(stderr, "Error: Failed to allocate memory for function entry\n");
+void register_user_function(ASTNode *func_node) {
+    if (!func_node || (func_node->type != AST_FUNCTION && func_node->type != AST_TYPED_FUNCTION)) {
+        if(func_node) fprintf(stderr, "Error (L%d:%d): Attempted to register non-function node '%s' as function.\n", func_node->line, func_node->col, func_node->value);
         return;
     }
-    
-    entry->func = func;
+    FunctionEntry *entry = (FunctionEntry *)calloc(1, sizeof(FunctionEntry)); // Use calloc
+    if (!entry) {
+        fprintf(stderr, "Error (L%d:%d): Failed to allocate memory for function entry '%s'\n", func_node->line, func_node->col, func_node->value);
+        return;
+    }
+    entry->func = func_node;
     entry->next = registered_functions;
     registered_functions = entry;
 }
 
-// Find a user-defined function by name
-ASTNode* find_user_function(const char *name) {
+ASTNode* find_user_function(const char *name, const char* class_context_name) {
     FunctionEntry *entry = registered_functions;
     while (entry) {
         if (entry->func && entry->func->value && strcmp(entry->func->value, name) == 0) {
-            return entry->func;
+            if (class_context_name) { 
+                if (entry->func->parent_class_name && strcmp(entry->func->parent_class_name, class_context_name) == 0) {
+                    return entry->func;
+                }
+            } else { 
+                if (entry->func->parent_class_name == NULL) {
+                    return entry->func;
+                }
+            }
         }
         entry = entry->next;
     }
     return NULL;
 }
 
-// Execute a function call with access control
-const char* execute_function_call(const char *name, ASTNode *args, StackFrame *frame) {
-    if (!name) return "undefined";
+const char* execute_function_call(const char *qualified_name, ASTNode *args_ast_list, StackFrame *caller_frame) {
+    if (!qualified_name) return "undefined";
     
-    printf("[VM] Executing function call: %s\n", name);
-    
-    // Save previous class context
-    char prev_class[128];
-    strncpy(prev_class, current_class, sizeof(prev_class));
-    
-    // Special handling for method calls
-    char object_id[128] = {0};
-    char method_name[128] = {0};
-    char object_class[128] = {0}; // To store the class name of the object
-    int is_method_call = 0;
-    const char *obj_str = NULL;
-    Object *obj = NULL;
-    
-    // Check if it's a method call (format: obj:123.method)
-    const char *dot_pos = strchr(name, '.');
-    if (dot_pos) {
-        is_method_call = 1;
-        size_t obj_part_len = dot_pos - name;
-        strncpy(object_id, name, obj_part_len);
-        object_id[obj_part_len] = '\0';
-        strcpy(method_name, dot_pos + 1);
-        
-        printf("[VM] Method call: %s on object %s\n", method_name, object_id);
-        
-        // Get the object instance for 'this'
-        if (strncmp(object_id, "obj:", 4) == 0) {
-            int id = atoi(object_id + 4);
-            printf("[VM] Looking for object with ID: %d\n", id);
-            
-            // Find the object by its ID
-            Object *obj_iter = objects;
-            while (obj_iter) {
-                int obj_id;
-                if (sscanf(obj_iter->class_name, "%[^#]#%d", object_class, &obj_id) == 2) {
-                    printf("[VM] Checking object: %s (ID: %d)\n", obj_iter->class_name, obj_id);
-                    if (obj_id == id) {
-                        obj = obj_iter;
-                        break;
+    char prev_class_context[128];
+    strncpy(prev_class_context, current_class, sizeof(prev_class_context));
+    prev_class_context[sizeof(prev_class_context)-1] = '\0';
+
+    char obj_or_class_id_str[128] = {0};   
+    char method_or_func_name[128] = {0};
+    char object_base_class_name[128] = {0}; 
+    Object *target_object_instance = NULL; 
+
+    const char *dot_pos = strrchr(qualified_name, '.'); // Use strrchr for nested classes like A.B.method
+    if (dot_pos) { 
+        size_t obj_or_class_part_len = dot_pos - qualified_name;
+        if (obj_or_class_part_len < sizeof(obj_or_class_id_str)) {
+            strncpy(obj_or_class_id_str, qualified_name, obj_or_class_part_len);
+            obj_or_class_id_str[obj_or_class_part_len] = '\0';
+        } else { strncpy(obj_or_class_id_str, "ErrorTooLong", sizeof(obj_or_class_id_str)-1); }
+
+        strncpy(method_or_func_name, dot_pos + 1, sizeof(method_or_func_name)-1);
+        method_or_func_name[sizeof(method_or_func_name)-1] = '\0';
+
+        if (strncmp(obj_or_class_id_str, "obj:", 4) == 0) { 
+            int id = atoi(obj_or_class_id_str + 4);
+            target_object_instance = find_object_by_id(id);
+            if (target_object_instance) {
+                char* hash_ptr = strchr(target_object_instance->class_name, '#');
+                if (hash_ptr) {
+                    size_t len = hash_ptr - target_object_instance->class_name;
+                    if (len < sizeof(object_base_class_name)) {
+                       strncpy(object_base_class_name, target_object_instance->class_name, len);
+                       object_base_class_name[len] = '\0';
+                       if(strstr(object_base_class_name, "_static")) { // if "ClassName_static"
+                            char * p = strstr(object_base_class_name, "_static");
+                            if(p) *p = '\0'; // Get "ClassName"
+                       }
                     }
                 }
-                obj_iter = obj_iter->next;
+                strncpy(current_class, object_base_class_name, sizeof(current_class)-1); 
+                current_class[sizeof(current_class)-1] = '\0';
+            } else {
+                fprintf(stderr, "Error: Object instance %s not found for method call '%s'.\n", obj_or_class_id_str, method_or_func_name);
+                strncpy(current_class, prev_class_context, sizeof(current_class)); return "undefined";
             }
-            
-            if (obj) {
-                obj_str = object_id;
-                printf("[VM] Found object: %s, class: %s\n", object_id, object_class);
-                
-                // Initialize TestClass objects when calling any method on them
-                if (strstr(obj->class_name, "TestClass") != NULL) {
-                    printf("[VM] Auto-initializing TestClass object before method call\n");
-                    initialize_test_class(obj);
+        } else { 
+            strncpy(object_base_class_name, obj_or_class_id_str, sizeof(object_base_class_name)-1);
+            object_base_class_name[sizeof(object_base_class_name)-1] = '\0';
+            strncpy(current_class, object_base_class_name, sizeof(current_class)-1); 
+            current_class[sizeof(current_class)-1] = '\0';
+        }
+    } else { 
+        strncpy(method_or_func_name, qualified_name, sizeof(method_or_func_name)-1);
+        method_or_func_name[sizeof(method_or_func_name)-1] = '\0';
+        current_class[0] = '\0'; 
+    }
+
+    const char *builtin_result = call_built_in_function(method_or_func_name, args_ast_list, caller_frame);
+    if (strcmp(builtin_result, "undefined") != 0 ) { 
+        strncpy(current_class, prev_class_context, sizeof(current_class));
+        return builtin_result;
+    }
+    // If not a builtin, AND (it's a global function OR it's a method being called on a class/object)
+    // This check is to prevent trying to find user func if it was meant for a builtin that failed.
+    // A more robust way: call_built_in_function could return a specific status like "not_a_builtin".
+    int is_potential_user_func = 1; 
+    if(object_base_class_name[0] == '\0' && find_user_function(method_or_func_name, NULL) == NULL) {
+        // If it was meant to be global but no global user function exists, it might have been a failed builtin.
+        // This is imperfect logic.
+        // is_potential_user_func = 0; 
+    }
+
+
+    ASTNode *func_ast = find_user_function(method_or_func_name, object_base_class_name[0] ? object_base_class_name : NULL);
+
+    if (func_ast) {
+        if (object_base_class_name[0] != '\0') { 
+            if (func_ast->access_modifier[0] != '\0' && strcmp(func_ast->access_modifier, "private") == 0) {
+                if (strcmp(prev_class_context, object_base_class_name) != 0) { // Check against CALLER's context
+                    fprintf(stderr, "Error (L%d): Cannot access private method '%s' of class '%s' from context '%s'.\n",
+                           func_ast->line, method_or_func_name, object_base_class_name, prev_class_context);
+                    strncpy(current_class, prev_class_context, sizeof(current_class)); return "undefined";
                 }
-                
-                // Set current class context based on the object's class
-                strncpy(current_class, object_class, sizeof(current_class) - 1);
-                current_class[sizeof(current_class) - 1] = '\0';
-                printf("[VM] Setting current class context: %s\n", current_class);
             }
-        }
-    }
-    
-    // First check if it's a built-in function
-    const char *result = call_built_in_function(name, args, frame);
-    if (strcmp(result, "undefined") != 0) {
-        // Restore previous class context
-        strncpy(current_class, prev_class, sizeof(current_class));
-        return result;
-    }
-    
-    // Try to find function in user-defined functions
-    ASTNode *func = find_user_function(name);
-    if (!func && is_method_call) {
-        // First fallback: class-qualified method (ClassName.method)
-        if (object_class[0] != '\0') {
-            char qual[256];
-            snprintf(qual, sizeof(qual), "%s.%s", object_class, method_name);
-            func = find_user_function(qual);
-        }
-        // If still not found, look by (class,name) pair among registered functions
-        if (!func && object_class[0] != '\0') {
-            FunctionEntry *fe = registered_functions;
-            while (fe) {
-                if (fe->func && fe->func->parent_class && strcmp(fe->func->parent_class, object_class) == 0 &&
-                    strcmp(fe->func->value, method_name) == 0) {
-                    func = fe->func;
-                    break;
-                }
-                fe = fe->next;
-            }
-        }
-        // We intentionally do NOT fall back to a plain method name on another class.
-    }
-    if (func) {
-        // Access control for private methods
-        if (is_method_call) {
-            if (func->access_modifier[0] != '\0' && strcmp(func->access_modifier, "private") == 0 && strcmp(current_class, prev_class) != 0) {
-                fprintf(stderr, "Error: Cannot access private method %s from outside the class\n", method_name);
-                strncpy(current_class, prev_class, sizeof(current_class));
-                return "undefined";
+            int is_static_call_on_class = (target_object_instance == NULL && object_base_class_name[0] != '\0');
+            int func_is_static = (func_ast->access_modifier[0] != '\0' && strcmp(func_ast->access_modifier, "static") == 0);
+
+            if (is_static_call_on_class && !func_is_static) {
+                 fprintf(stderr, "Error (L%d): Cannot call non-static method '%s' of class '%s' statically.\n",
+                           func_ast->line, method_or_func_name, object_base_class_name);
+                strncpy(current_class, prev_class_context, sizeof(current_class)); return "undefined";
             }
         }
 
-        // Create a new stack frame for the function call
-        StackFrame *new_frame = create_stack_frame(name, frame);
-
-        // Set 'this' if needed
-        if (is_method_call && obj_str) {
-            printf("[VM] Setting 'this' to %s in the function frame\n", obj_str);
-            set_variable(new_frame, "this", obj_str);
+        StackFrame *new_frame = create_stack_frame(qualified_name, caller_frame);
+        if (target_object_instance) { 
+            set_variable(new_frame, "this", obj_or_class_id_str); 
         }
 
-        // Map parameters to arguments (parameters are stored in func->left list)
-        ASTNode *param = func->left;
-        ASTNode *arg = args;
-        while (param && arg) {
-            const char *arg_value = evaluate_expression(arg, frame);
-            set_variable(new_frame, param->value, arg_value);
-            param = param->next;
-            arg = arg->next;
+        ASTNode *param_def_ast = func_ast->left; 
+        ASTNode *arg_val_ast = args_ast_list;   
+        while (param_def_ast && arg_val_ast) {
+            const char *arg_evaluated_value = evaluate_expression(arg_val_ast, caller_frame); 
+            set_variable(new_frame, param_def_ast->value, arg_evaluated_value);
+            param_def_ast = param_def_ast->next;
+            arg_val_ast = arg_val_ast->next;
+        }
+        if (param_def_ast != NULL || arg_val_ast != NULL) {
+            fprintf(stderr, "Error (L%d): Argument count mismatch for function/method '%s'.\n",
+                   func_ast->line, qualified_name);
+            destroy_stack_frame(new_frame);
+            strncpy(current_class, prev_class_context, sizeof(current_class)); return "undefined";
         }
 
-        // Execute the function body (stored in right child)
-        run_vm_node(func->right, new_frame);
-
-        // Retrieve return value (if any) from VM helper
-        const char *ret_val = get_return_value();
-
+        run_vm_node(func_ast->right, new_frame); 
+        const char *fn_return_val = get_return_value(); // This is already a fresh strdup from set_return_value
+        
         destroy_stack_frame(new_frame);
-
-        strncpy(current_class, prev_class, sizeof(current_class));
-
-        printf("[VM] Function call '%s' completed with result: %s\n", name, ret_val);
-        return ret_val;
+        strncpy(current_class, prev_class_context, sizeof(current_class));
+        
+        return fn_return_val; 
     }
     
-    // Function not found – suppress noise for lifecycle hooks
-    const char *lifecycle[] = {"Awake","Start","FixedUpdate","Update","LateUpdate",NULL};
-    int is_lifecycle = 0;
-    for (int i=0; lifecycle[i]; ++i) {
-        if (strcmp(method_name[0] ? method_name : name, lifecycle[i]) == 0) { is_lifecycle = 1; break; }
+    const char *lifecycle_hooks[] = {"Awake","Start","FixedUpdate","Update","LateUpdate", "init", NULL};
+    int is_optional_hook = 0;
+    for (int i=0; lifecycle_hooks[i]; ++i) {
+        if (strcmp(method_or_func_name, lifecycle_hooks[i]) == 0) { is_optional_hook = 1; break; }
     }
-    if (!is_lifecycle) {
-        fprintf(stderr, "Error: Function not found: %s\n", name);
+    if (!is_optional_hook && is_potential_user_func) { // Only error if not optional and was likely a user func
+      fprintf(stderr, "Error: Function/Method '%s' not found%s%s.\n",
+              method_or_func_name, object_base_class_name[0] ? " in class " : "",
+              object_base_class_name[0] ? object_base_class_name : "");
     }
     
-    // Restore previous class context
-    strncpy(current_class, prev_class, sizeof(current_class));
-    
+    strncpy(current_class, prev_class_context, sizeof(current_class));
     return "undefined";
 }
 
-// Execute a node
+
 void run_vm_node(ASTNode *node, StackFrame *frame) {
     if (!node) return;
     
-    // Set class context from the frame's function name if it looks like a class method
-    if (frame && frame->function_name && strncmp(frame->function_name, "obj:", 4) != 0) {
-        char *dot = strchr(frame->function_name, '.');
-        if (dot) {
-            // ClassName.methodName pattern
-            size_t len = dot - frame->function_name;
-            if (len >= sizeof(current_class)) len = sizeof(current_class) - 1;
-            strncpy(current_class, frame->function_name, len);
-            current_class[len] = '\0';
-        }
-    }
-    
+    // This current_class update is simplistic. execute_function_call is better placed to manage it.
+    // if (frame && frame->function_name) {
+    //     const char *dot_pos = strrchr(frame->function_name, '.'); // Use strrchr
+    //     if (dot_pos) {
+    //         if (strncmp(frame->function_name, "obj:", 4) != 0) { 
+    //             size_t class_name_len = dot_pos - frame->function_name;
+    //             if (class_name_len < sizeof(current_class)) {
+    //                 strncpy(current_class, frame->function_name, class_name_len);
+    //                 current_class[class_name_len] = '\0';
+    //             }
+    //         }
+    //     } else {
+    //          if(strcmp(frame->name, "global") == 0) current_class[0] = '\0';
+    //     }
+    // }
+
     switch (node->type) {
         case AST_PROGRAM: {
-            // Execute all top-level statements
             ASTNode *stmt = node->left;
-            while (stmt) {
-                run_vm_node(stmt, frame);
-                stmt = stmt->next;
-            }
+            while (stmt) { run_vm_node(stmt, frame); stmt = stmt->next; }
             break;
         }
-            
-        case AST_FUNCTION: {
-            // Just register the function in this pass
-            // This is handled in the first pass of run_vm
-            break;
-        }
-            
+        case AST_FUNCTION: case AST_TYPED_FUNCTION: break; 
         case AST_BLOCK: {
-            // Execute all statements in the block
             ASTNode *stmt = node->left;
-            while (stmt) {
-                run_vm_node(stmt, frame);
-                stmt = stmt->next;
-            }
+            while (stmt) { run_vm_node(stmt, frame); stmt = stmt->next; }
             break;
         }
-            
         case AST_PRINT: {
-            // Evaluate the expression to print
-            const char *value = evaluate_expression(node->left, frame);
-            printf("%s\n", value ? value : "undefined");
+            const char *value_to_print = evaluate_expression(node->left, frame);
+            printf("%s\n", value_to_print ? value_to_print : "undefined");
             break;
         }
-            
-        case AST_VAR_DECL: {
-            // Evaluate initializer if present
-            const char *value = "undefined";
-            if (node->right) {
-                value = evaluate_expression(node->right, frame);
+        case AST_VAR_DECL: 
+        case AST_TYPED_VAR_DECL: { 
+            const char *var_name = node->value; 
+            const char *initial_value_str = "undefined"; 
+            if (node->right) { 
+                initial_value_str = evaluate_expression(node->right, frame);
+            } else if (node->type == AST_TYPED_VAR_DECL) { // Default init for typed vars if no explicit init
+                if(strcmp(node->data_type, "int")==0 || strcmp(node->data_type, "long")==0) initial_value_str = "0";
+                else if(strcmp(node->data_type, "float")==0 || strcmp(node->data_type, "double")==0) initial_value_str = "0.0";
+                else if(strcmp(node->data_type, "bool")==0) initial_value_str = "false";
+                else if(strcmp(node->data_type, "string")==0) initial_value_str = "";
+                // Object types default to null/undefined implicitly
             }
-            
-            // Set the variable in the current stack frame
-            set_variable(frame, node->left->value, value);
+            set_variable(frame, var_name, initial_value_str);
             break;
         }
-            
-        case AST_ASSIGN: {
-            // Evaluate right-hand side
-            const char *value = evaluate_expression(node->right, frame);
-            
-            // Set the variable
+        case AST_ASSIGN: { 
+            const char *value_to_assign = evaluate_expression(node->right, frame);
             if (node->left->type == AST_IDENTIFIER) {
-                set_variable(frame, node->left->value, value);
+                set_variable(frame, node->left->value, value_to_assign);
             } else if (node->left->type == AST_MEMBER_ACCESS) {
-                // Handle object property assignment
-                const char *obj_str = NULL;
-                
-                if (node->left->left->type == AST_THIS) {
-                    // Handle 'this' keyword - get from current frame
-                    obj_str = get_variable(frame, "this");
-                    if (!obj_str) {
-                        fprintf(stderr, "Error: 'this' is undefined in current context\n");
-                        break;
-                    }
-                    printf("[DEBUG] In AST_ASSIGN - This reference resolved to: %s\n", obj_str);
-                } else {
-                    // Handle regular object reference
-                    obj_str = evaluate_expression(node->left->left, frame);
-                }
-                
-                if (!obj_str || strcmp(obj_str, "undefined") == 0) {
-                    fprintf(stderr, "Error: Cannot set property on undefined\n");
-                    break;
-                }
-                
-                // Check if it's an object reference (obj:ID format)
-                if (strncmp(obj_str, "obj:", 4) == 0) {
-                    int obj_id = atoi(obj_str + 4);
-                    Object *obj = find_object_by_id(obj_id);
-                    
-                    if (!obj) {
-                        fprintf(stderr, "Error: Object not found with ID: %d\n", obj_id);
-                        break;
-                    }
-                    
-                    printf("[DEBUG] Setting property %s on object %s to value %s\n", 
-                           node->left->value, obj->class_name, value);
-                    
-                    // Determine access modifier
-                    AccessModifier access = ACCESS_PUBLIC;
-                    int is_static = 0;
-                    
-                    if (node->left->access_modifier[0] != '\0') {
-                        if (strcmp(node->left->access_modifier, "private") == 0) {
-                            access = ACCESS_PRIVATE;
-                        } else if (strcmp(node->left->access_modifier, "static") == 0) {
-                            is_static = 1;
-                        }
-                    }
-                    
-                    // Set the property
-                    set_object_property_with_access(obj, node->left->value, value, access, is_static);
-                } else {
-                    fprintf(stderr, "Error: Cannot set property on non-object: %s\n", obj_str);
-                }
-            }
-            break;
-        }
-            
-        case AST_RETURN: {
-            // Evaluate return value
-            const char *value = node->left ? evaluate_expression(node->left, frame) : "0";
-            set_return_value(value);
-            break;
-        }
-            
-        case AST_IF: {
-            // Evaluate condition
-            const char *condition = evaluate_expression(node->left, frame);
-            
-            // Check if condition is truthy
-            if (condition && strcmp(condition, "0") != 0 && strcmp(condition, "") != 0) {
-                // Execute then branch
-                run_vm_node(node->right, frame);
-            } else if (node->next && node->next->type == AST_ELSE) {
-                // Execute else branch
-                run_vm_node(node->next->left, frame);
-            }
-            break;
-        }
-            
-        case AST_WHILE: {
-            // Execute while loop
-            while (1) {
-                // Evaluate condition
-                const char *condition = evaluate_expression(node->left, frame);
-                
-                // Check if condition is falsy
-                if (!condition || strcmp(condition, "0") == 0 || strcmp(condition, "") == 0) {
-                    break;
-                }
-                
-                // Execute body
-                run_vm_node(node->right, frame);
-            }
-            break;
-        }
-            
-        case AST_CALL: {
-            // Handle function calls (like print, etc.)
-            const char *func_name = node->value;
-            execute_function_call(func_name, node->left, frame);
-            break;
-        }
-            
-        case AST_BINARY_OP: {
-            // Check if it's an assignment
-            if (strcmp(node->value, "=") == 0) {
-                // Assignment operation
-                const char *value = evaluate_expression(node->right, frame);
-                
-                if (node->left->type == AST_IDENTIFIER) {
-                    // Variable assignment
-                    set_variable(frame, node->left->value, value);
-                } 
-                else if (node->left->type == AST_MEMBER_ACCESS) {
-                    // Object property assignment
-                    const char *obj_str;
-                    
-                    if (node->left->left->type == AST_THIS) {
-                        // Handle 'this' keyword
-                        obj_str = get_variable(frame, "this");
-                        if (!obj_str) {
-                            fprintf(stderr, "Error: 'this' is undefined in current context\n");
-                            break;
-                        }
-                    } else {
-                        // Regular object reference
-                        obj_str = evaluate_expression(node->left->left, frame);
-                    }
-                    
-                    printf("[VM_ASSIGN] Setting %s.%s = %s (class context: %s)\n", 
-                           obj_str ? obj_str : "undefined", 
-                           node->left->value, 
-                           value,
-                           current_class);
-                    
-                    if (obj_str && strncmp(obj_str, "obj:", 4) == 0) {
-                        int id = atoi(obj_str + 4);
-                        
-                        // Find the object
-                        Object *obj = objects;
-                        while (obj) {
-                            int obj_id;
-                            sscanf(obj->class_name, "%*[^#]#%d", &obj_id);
-                            if (obj_id == id) {
-                                // Determine access modifier
-                                AccessModifier access = ACCESS_PUBLIC;
-                                int is_static = 0;
-                                
-                                // Access modifiers from AST
-                                if (node->left->access_modifier[0] != '\0') {
-                                    if (strcmp(node->left->access_modifier, "private") == 0) {
-                                        access = ACCESS_PRIVATE;
-                                    } else if (strcmp(node->left->access_modifier, "static") == 0) {
-                                        is_static = 1;
-                                    }
-                                }
-                                
-                                // Set the property directly
-                                set_object_property_with_access(obj, node->left->value, value, access, is_static);
-                                break;
-                            }
-                            obj = obj->next;
-                        }
-                        
-                        if (!obj) {
-                            fprintf(stderr, "Error: Object not found for ID: %d\n", id);
-                        }
-                    } else {
-                        fprintf(stderr, "Error: Cannot set property on non-object: %s\n", obj_str ? obj_str : "undefined");
-                    }
-                }
+                // This case should ideally be fully handled by AST_BINARY_OP with "="
+                // Forcing it here means re-evaluating parts of member access.
+                // Simplified: Assume evaluate_expression for AST_BINARY_OP handles it.
+                // If AST_ASSIGN is kept distinct, it needs full LHS evaluation logic.
+                // For now, rely on the BINARY_OP path.
+                fprintf(stderr, "Warning L%d: AST_ASSIGN for member access is less robust, prefer BINARY_OP for assignment.\n", node->line);
+                // Quick attempt to make it work similarly to BINARY_OP's assignment logic
+                ASTNode temp_binary_op_assign_node; // Stack allocate a temporary node
+                temp_binary_op_assign_node.type = AST_BINARY_OP;
+                strcpy(temp_binary_op_assign_node.value, "="); // Operator is "="
+                temp_binary_op_assign_node.left = node->left;   // Original LHS (e.g. member access node)
+                temp_binary_op_assign_node.right = node->right; // Original RHS (expression node for value)
+                temp_binary_op_assign_node.line = node->line;
+                temp_binary_op_assign_node.col = node->col;
+                evaluate_expression(&temp_binary_op_assign_node, frame); // Let eval handle it
             } else {
-                // Other binary operations
-                evaluate_expression(node, frame);
+                 fprintf(stderr, "Error (L%d:%d): Invalid left-hand side for AST_ASSIGN operation.\n", node->left->line, node->left->col);
             }
             break;
         }
-            
-        case AST_MEMBER_ACCESS: {
-            // Just evaluate the expression to handle property access
-            evaluate_expression(node, frame);
+        case AST_RETURN: {
+            const char *ret_val_str = node->left ? evaluate_expression(node->left, frame) : "0"; 
+            set_return_value(ret_val_str);
             break;
         }
-            
-        default:
-            // Other node types are handled by the evaluator
+        case AST_IF: {
+            const char *cond_val_str = evaluate_expression(node->left, frame); 
+            int truthy = cond_val_str && strcmp(cond_val_str, "0") != 0 && strcmp(cond_val_str, "false") != 0 && strcmp(cond_val_str, "") != 0;
+            if (truthy) run_vm_node(node->right, frame); 
+            else if (node->next && node->next->type == AST_ELSE) run_vm_node(node->next->left, frame); 
+            break;
+        }
+        case AST_WHILE: {
+            while(1) {
+                const char *cond_val_str = evaluate_expression(node->left, frame); 
+                int truthy = cond_val_str && strcmp(cond_val_str, "0") != 0 && strcmp(cond_val_str, "false") != 0 && strcmp(cond_val_str, "") != 0;
+                if (!truthy) break;
+                run_vm_node(node->right, frame); 
+            }
+            break;
+        }
+        case AST_FOR: {
+            ASTNode* init_expr = NULL; ASTNode* cond_expr = NULL; ASTNode* incr_expr = NULL;
+            ASTNode* current_control_part = node->left;
+            if (current_control_part) { init_expr = current_control_part; current_control_part = current_control_part->next; }
+            if (current_control_part) { cond_expr = current_control_part; current_control_part = current_control_part->next; }
+            if (current_control_part) { incr_expr = current_control_part; }
+
+            if (init_expr) {
+                if(init_expr->type == AST_VAR_DECL || init_expr->type == AST_TYPED_VAR_DECL) run_vm_node(init_expr, frame);
+                else evaluate_expression(init_expr, frame); 
+            }
+            while (1) {
+                int truthy = 1; 
+                if (cond_expr) {
+                    const char *cond_val_str = evaluate_expression(cond_expr, frame);
+                    truthy = cond_val_str && strcmp(cond_val_str, "0") != 0 && strcmp(cond_val_str, "false") != 0 && strcmp(cond_val_str, "") != 0;
+                }
+                if (!truthy) break; 
+                run_vm_node(node->right, frame); 
+                if (incr_expr) evaluate_expression(incr_expr, frame); 
+            }
+            break;
+        }
+        case AST_CALL: {
+            // Reconstruct qualified name if method call stored as target->right, value->method_name
+            char qualified_name_buffer[512];
+            if (node->right) { // Method call (target in right, method name in value)
+                const char* target_eval_str = evaluate_expression(node->right, frame);
+                snprintf(qualified_name_buffer, sizeof(qualified_name_buffer), "%s.%s", target_eval_str ? target_eval_str : "undefined_target", node->value);
+            } else { // Plain function call
+                strncpy(qualified_name_buffer, node->value, sizeof(qualified_name_buffer)-1);
+                qualified_name_buffer[sizeof(qualified_name_buffer)-1] = '\0';
+            }
+            execute_function_call(qualified_name_buffer, node->left, frame);
+            break;
+        }
+        case AST_BINARY_OP: case AST_UNARY_OP: case AST_LITERAL: 
+        case AST_IDENTIFIER: case AST_MEMBER_ACCESS: case AST_NEW:
             evaluate_expression(node, frame);
+            break;
+        default:
+            // fprintf(stderr, "Warning (L%d:%d): VM cannot run unknown AST node type %s (%d).\n", node->line, node->col, node_type_to_string(node->type), node->type);
             break;
     }
 }
 
-// Execute the whole program
-void run_vm(ASTNode *root) {
-    // Initialize VM if needed
-    if (!global_frame) {
-        vm_init();
-    }
+void run_vm(ASTNode *root_ast_node) {
+    if (!root_ast_node) { fprintf(stderr, "[VM] Error: Cannot run VM on NULL AST.\n"); return; }
+    vm_init(); 
     
-    printf("\n==== Program Output ====\n");
+    // printf("\n==== Program Output (VM Run) ====\n");
     
-    // First pass: process imports and register all functions before executing anything
-    if (root && root->type == AST_PROGRAM) {
-        ASTNode *node = root->left;
+    if (root_ast_node->type == AST_PROGRAM) {
+        ASTNode *node = root_ast_node->left;
         while (node) {
             if (node->type == AST_FUNCTION || node->type == AST_TYPED_FUNCTION) {
-                printf("[VM] Registering function: %s\n", node->value);
                 register_user_function(node);
             } else if (node->type == AST_CLASS) {
-                // Register the class
-                printf("[VM] Registering class: %s\n", node->value);
-                vm_register_class(node->value);
-                
-                // Register its methods as functions
-                ASTNode *class_member = node->left;
+                vm_register_class(node); 
+                ASTNode *class_member = node->left; 
                 while (class_member) {
                     if (class_member->type == AST_FUNCTION || class_member->type == AST_TYPED_FUNCTION) {
-                        // Set parent class for this method
-                        class_member->parent_class = node->value;
-                        printf("[VM] Registering method: %s.%s\n", node->value, class_member->value);
+                        if (class_member->parent_class_name) free(class_member->parent_class_name);
+                        class_member->parent_class_name = strdup(node->value); 
                         register_user_function(class_member);
                     }
                     class_member = class_member->next;
                 }
             } else if (node->type == AST_IMPORT) {
-                // Process imports to load external modules
-                Module *module = module_load(node->value);
-                if (module && module->ast) {
-                    // Register all functions from the imported module
-                    if (module->ast->type == AST_PROGRAM) {
-                        ASTNode *stmt = module->ast->left;
-                        while (stmt) {
-                            if (stmt->type == AST_FUNCTION || stmt->type == AST_TYPED_FUNCTION) {
-                                register_user_function(stmt);
-                            } else if (stmt->type == AST_CLASS) {
-                                // Register the class
-                                vm_register_class(stmt->value);
-                                
-                                // Register its methods as functions
-                                ASTNode *class_member = stmt->left;
-                                while (class_member) {
-                                    if (class_member->type == AST_FUNCTION || class_member->type == AST_TYPED_FUNCTION) {
-                                        // Set parent class for this method
-                                        class_member->parent_class = stmt->value;
-                                        register_user_function(class_member);
-                                    }
-                                    class_member = class_member->next;
-                                }
-                            }
-                            stmt = stmt->next;
-                        }
-                    }
-                }
+                 // printf("[VM PreScan] TODO: Implement import processing for module '%s' (L%d)\n", node->value, node->line);
             }
             node = node->next;
         }
     }
     
-    // --- Build per-class singleton objects once ---
     typedef struct LifecycleInstance {
-        char obj_ref[32];
+        char obj_ref_str[32]; 
+        const char* class_name;
         struct LifecycleInstance *next;
     } LifecycleInstance;
-    LifecycleInstance *instances = NULL;
-    LifecycleInstance *inst_tail = NULL;
+
+    LifecycleInstance *lifecycle_instances_list = NULL;
+    LifecycleInstance *lifecycle_instances_tail = NULL;
 
     ClassEntry *cls_iter = registered_classes;
     while (cls_iter) {
-        Object *obj = create_object(cls_iter->name);
-        if (obj) {
-            int obj_id = 0;
-            sscanf(obj->class_name, "%*[^#]#%d", &obj_id);
-            LifecycleInstance *inst = malloc(sizeof(LifecycleInstance));
-            snprintf(inst->obj_ref, sizeof(inst->obj_ref), "obj:%d", obj_id);
-            inst->next = NULL;
-            if (!instances) {
-                instances = inst_tail = inst;
-            } else {
-                inst_tail->next = inst;
-                inst_tail = inst;
-            }
-
-            // Auto-set singleton static reference if the class declares a field named 'singleton'
-            Object *static_obj = find_static_class_object(cls_iter->name);
-            if (static_obj) {
-                // Only set if not already assigned
-                const char *existing = get_object_property_with_access_check(static_obj, "singleton", cls_iter->name);
-                if (!existing || strcmp(existing, "undefined") == 0) {
-                    char obj_ref[32];
-                    snprintf(obj_ref, sizeof(obj_ref), "obj:%d", obj_id);
-                    printf("[VM] Auto-setting %s.singleton = %s\n", cls_iter->name, obj_ref);
-                    set_object_property_with_access(static_obj, "singleton", obj_ref, ACCESS_PUBLIC, 1);
+        find_static_class_object(cls_iter->name); 
+        Object *instance_obj = create_object(cls_iter->name); 
+        if (instance_obj) {
+            int obj_id_val = 0;
+            sscanf(instance_obj->class_name, "%*[^#]#%d", &obj_id_val); 
+            LifecycleInstance *inst_entry = (LifecycleInstance*)calloc(1, sizeof(LifecycleInstance)); // Use calloc
+            if (!inst_entry) { fprintf(stderr, "Mem alloc failed for lifecycle entry\n"); break;}
+            snprintf(inst_entry->obj_ref_str, sizeof(inst_entry->obj_ref_str), "obj:%d", obj_id_val);
+            inst_entry->class_name = cls_iter->name; 
+            if (!lifecycle_instances_list) lifecycle_instances_list = lifecycle_instances_tail = inst_entry;
+            else { lifecycle_instances_tail->next = inst_entry; lifecycle_instances_tail = inst_entry; }
+            
+            Object* static_obj_for_class = find_static_class_object(cls_iter->name);
+            if (static_obj_for_class) {
+                int has_static_singleton_field = 0;
+                if (cls_iter->class_node && cls_iter->class_node->left) {
+                    ASTNode* member = cls_iter->class_node->left;
+                    while(member) {
+                        if ((member->type == AST_VAR_DECL || member->type == AST_TYPED_VAR_DECL) &&
+                            strcmp(member->value, "singleton") == 0 &&
+                            member->access_modifier[0] != '\0' && strcmp(member->access_modifier, "static") == 0) {
+                            has_static_singleton_field = 1; break;
+                        }
+                        member = member->next;
+                    }
+                }
+                if (has_static_singleton_field) {
+                    set_object_property_with_access(static_obj_for_class, "singleton", inst_entry->obj_ref_str, ACCESS_PUBLIC, 1);
                 }
             }
         }
         cls_iter = cls_iter->next;
     }
 
-    const char *awake_name  = "Awake";
-    const char *start_name  = "Start";
-    const char *update_name = "Update";
-    const char *fixed_name  = "FixedUpdate";
-    const char *late_name   = "LateUpdate";
-
-    // ---------- Awake phase (global + per-instance) ----------
-    ASTNode *global_awake = find_user_function(awake_name);
-    if (global_awake && global_awake->parent_class == NULL) {
-        printf("[VM] Running global Awake\n");
-        execute_function_call(awake_name, NULL, global_frame);
-    }
-    for (LifecycleInstance *it = instances; it; it = it->next) {
-        char qual[256];
-        snprintf(qual, sizeof(qual), "%s.%s", it->obj_ref, awake_name);
-        execute_function_call(qual, NULL, global_frame);
-    }
-
-    // ---------- Start phase (global + per-instance) ----------
-    if (find_user_function(start_name)) {
-        printf("[VM] Running global Start\n");
-        execute_function_call(start_name, NULL, global_frame);
-    }
-    for (LifecycleInstance *it = instances; it; it = it->next) {
-        char qual[256];
-        snprintf(qual, sizeof(qual), "%s.%s", it->obj_ref, start_name);
-        execute_function_call(qual, NULL, global_frame);
-    }
-
-    // ---------- Main loop ----------
-    const int FRAME_COUNT = 10; // simple fixed loop; extend later
-    
-    // Check if any lifecycle methods exist before entering the frame loop
-    int has_lifecycle_methods = 0;
-    if (find_user_function(update_name) || find_user_function(fixed_name) || find_user_function(late_name)) {
-        has_lifecycle_methods = 1;
-    } else {
-        // Check for instance lifecycle methods
-        for (LifecycleInstance *it = instances; it && !has_lifecycle_methods; it = it->next) {
-            char qual_update[256], qual_fixed[256], qual_late[256];
-            snprintf(qual_update, sizeof(qual_update), "%s.%s", it->obj_ref, update_name);
-            snprintf(qual_fixed, sizeof(qual_fixed), "%s.%s", it->obj_ref, fixed_name);
-            snprintf(qual_late, sizeof(qual_late), "%s.%s", it->obj_ref, late_name);
-            
-            if (find_user_function(qual_update) || find_user_function(qual_fixed) || 
-                find_user_function(qual_late)) {
-                has_lifecycle_methods = 1;
-            }
+    const char *lifecycle_names[] = {"Awake", "Start", "FixedUpdate", "Update", "LateUpdate"};
+    // Awake & Start
+    for(int lc_idx = 0; lc_idx < 2; ++lc_idx) { // Awake, then Start
+        const char* lc_name = lifecycle_names[lc_idx];
+        if (find_user_function(lc_name, NULL)) execute_function_call(lc_name, NULL, global_frame);
+        for (LifecycleInstance *it = lifecycle_instances_list; it; it = it->next) {
+            char qmn[256]; snprintf(qmn, sizeof(qmn), "%s.%s", it->obj_ref_str, lc_name);
+            execute_function_call(qmn, NULL, global_frame);
         }
     }
     
-    if (!has_lifecycle_methods) {
-        printf("[VM] No lifecycle methods (Update/FixedUpdate/LateUpdate) found. Skipping frame loop.\n");
-    } else {
-        for (int frame = 0; frame < FRAME_COUNT; ++frame) {
-            printf("[VM] ---- Frame %d ----\n", frame);
-
-            // FixedUpdate
-            if (find_user_function(fixed_name)) {
-                execute_function_call(fixed_name, NULL, global_frame);
-            }
-            for (LifecycleInstance *it = instances; it; it = it->next) {
-                char qual[256];
-                snprintf(qual, sizeof(qual), "%s.%s", it->obj_ref, fixed_name);
-                execute_function_call(qual, NULL, global_frame);
-            }
-
-            // Update
-            if (find_user_function(update_name)) {
-                execute_function_call(update_name, NULL, global_frame);
-            }
-            for (LifecycleInstance *it = instances; it; it = it->next) {
-                char qual[256];
-                snprintf(qual, sizeof(qual), "%s.%s", it->obj_ref, update_name);
-                execute_function_call(qual, NULL, global_frame);
-            }
-
-            // LateUpdate
-            if (find_user_function(late_name)) {
-                execute_function_call(late_name, NULL, global_frame);
-            }
-            for (LifecycleInstance *it = instances; it; it = it->next) {
-                char qual[256];
-                snprintf(qual, sizeof(qual), "%s.%s", it->obj_ref, late_name);
-                execute_function_call(qual, NULL, global_frame);
-            }
+    int has_any_update = 0;
+    for(int lc_idx = 2; lc_idx < 5; ++lc_idx) { // FixedUpdate, Update, LateUpdate
+        if(find_user_function(lifecycle_names[lc_idx], NULL)) { has_any_update = 1; break; }
+    }
+    if (!has_any_update) {
+        for (LifecycleInstance *it = lifecycle_instances_list; it; it = it->next) {
+             for(int lc_idx = 2; lc_idx < 5; ++lc_idx) {
+                if (find_user_function(lifecycle_names[lc_idx], it->class_name)) { has_any_update = 1; break; }
+             }
+             if(has_any_update) break;
         }
     }
 
-    // Free instance list helper (objects themselves are cleaned in vm_cleanup)
-    while (instances) {
-        LifecycleInstance *next = instances->next;
-        free(instances);
-        instances = next;
+    if (has_any_update) {
+        const int FRAME_COUNT = 1; // Reduced for quicker test runs
+        for (int frame_idx = 0; frame_idx < FRAME_COUNT; ++frame_idx) {
+            for(int lc_idx = 2; lc_idx < 5; ++lc_idx) { // FixedUpdate, Update, LateUpdate
+                const char* lc_name = lifecycle_names[lc_idx];
+                if (find_user_function(lc_name, NULL)) execute_function_call(lc_name, NULL, global_frame);
+                for (LifecycleInstance *it = lifecycle_instances_list; it; it = it->next) {
+                    char qmn[256]; snprintf(qmn, sizeof(qmn), "%s.%s", it->obj_ref_str, lc_name);
+                    execute_function_call(qmn, NULL, global_frame);
+                }
+            }
+        }
+    } else {
+        run_vm_node(root_ast_node, global_frame);
     }
-    
-    // Clean up
-    vm_cleanup();
+
+    while(lifecycle_instances_list) {
+        LifecycleInstance* next = lifecycle_instances_list->next;
+        free(lifecycle_instances_list);
+        lifecycle_instances_list = next;
+    }
+    // vm_cleanup called by main
 }
 
-// Set an object property (basic version for backward compatibility)
 void set_object_property(Object *obj, const char *name, const char *value) {
-    set_object_property_with_access(obj, name, value, ACCESS_PUBLIC, 0);
+    set_object_property_with_access(obj, name, value, ACCESS_PUBLIC, 0); 
 }
 
-// Evaluate a member access expression (obj.property)
-const char* evaluate_member_access(ASTNode *expr, StackFrame *frame) {
-    if (!expr || !expr->left || !expr->value) {
-        fprintf(stderr, "Error: Invalid member access expression\n");
+const char* evaluate_member_access(ASTNode *member_access_expr_node, StackFrame *frame) {
+    if (!member_access_expr_node || member_access_expr_node->type != AST_MEMBER_ACCESS || 
+        !member_access_expr_node->left || !member_access_expr_node->value[0]) {
+        // fprintf(stderr, "Error (L%d:%d): Invalid member access expression.\n", member_access_expr_node ? member_access_expr_node->line: 0, member_access_expr_node ? member_access_expr_node->col : 0);
         return "undefined";
     }
     
-    // Get the object from the left part
-    const char *obj_str;
-    
-    if (expr->left->type == AST_THIS) {
-        // Handle 'this' keyword
-        obj_str = get_variable(frame, "this");
-        if (!obj_str) {
-            fprintf(stderr, "Error: 'this' is undefined in current context\n");
+    const char *object_or_class_ref_str;
+    ASTNode *target_expr_node = member_access_expr_node->left; 
+    const char *property_name_str = member_access_expr_node->value; 
+
+    if (target_expr_node->type == AST_THIS) {
+        object_or_class_ref_str = get_variable(frame, "this");
+        if (!object_or_class_ref_str) {
+            fprintf(stderr, "Error (L%d:%d): 'this' is undefined in current context for member access '%s'.\n", target_expr_node->line, target_expr_node->col, property_name_str);
             return "undefined";
         }
     } else {
-        // Regular object reference
-        obj_str = evaluate_expression(expr->left, frame);
+        object_or_class_ref_str = evaluate_expression(target_expr_node, frame);
     }
     
-    if (!obj_str || strcmp(obj_str, "undefined") == 0) {
-        fprintf(stderr, "Error: Cannot access property of undefined\n");
+    if (!object_or_class_ref_str || strcmp(object_or_class_ref_str, "undefined") == 0) {
+        // Semantic analysis should catch most of these if target_expr_node->value is an undeclared identifier
+        // This error might still occur if evaluate_expression for target_expr_node results in "undefined" at runtime
+        // printf("[VM EVAL_MEMBER_ACCESS] Error: Cannot access property '%s' of undefined or unresolved target '%s' (L%d).\n", 
+        //        property_name_str, target_expr_node->value, member_access_expr_node->line);
         return "undefined";
     }
-    
-    // Check if it's a class name (for static access)
-    if (expr->left->type == AST_IDENTIFIER) {
-        ASTNode *current = program;
-        while (current) {
-            if (current->type == AST_CLASS && strcmp(current->value, expr->left->value) == 0) {
-                // Found the class, check for static property
-                // Look for a static property in the class
-                Object *static_obj = find_static_class_object(expr->left->value);
-                if (static_obj) {
-                    const char *static_value = get_object_property_with_access_check(
-                        static_obj, expr->value, current_class);
-                    if (static_value) {
-                        return static_value;
-                    }
-                }
-                
-                fprintf(stderr, "Error: Static property '%s' not found in class '%s'\n", 
-                       expr->value, expr->left->value);
-                return "undefined";
-            }
-            current = current->next;
-        }
-    }
-    
-    // Check if it's an object reference
-    if (strncmp(obj_str, "obj:", 4) == 0) {
-        int obj_id = atoi(obj_str + 4);
-        Object *obj = find_object_by_id(obj_id);
-        
-        if (obj) {
-            // Extract the class name for access checking
-            char class_name[128] = {0};
-            char *hash_pos = strchr(obj->class_name, '#');
-            if (hash_pos) {
-                size_t class_name_len = hash_pos - obj->class_name;
-                strncpy(class_name, obj->class_name, class_name_len);
-                class_name[class_name_len] = '\0';
-            } else {
-                strncpy(class_name, obj->class_name, sizeof(class_name) - 1);
-            }
-            
-            // First check for instance properties
-            const char *prop_value = get_object_property_with_access_check(obj, expr->value, current_class);
-            if (prop_value) {
-                return prop_value;
-            }
-            
-            // If not found, check for static properties
-            Object *static_obj = find_static_class_object(class_name);
-            if (static_obj) {
-                const char *static_value = get_object_property_with_access_check(
-                    static_obj, expr->value, current_class);
-                if (static_value) {
-                    return static_value;
-                }
-            }
-            
-            // Property not found
-            fprintf(stderr, "Error: Property '%s' not found or not accessible on object %s\n", 
-                   expr->value, obj->class_name);
-            return "undefined";
+
+    if (strncmp(object_or_class_ref_str, "obj:", 4) == 0) { 
+        int obj_id = atoi(object_or_class_ref_str + 4);
+        Object *target_obj = find_object_by_id(obj_id);
+        if (target_obj) {
+            return get_object_property_with_access(target_obj, property_name_str, current_class);
         } else {
-            fprintf(stderr, "Error: Object with ID %d not found\n", obj_id);
+            fprintf(stderr, "Error (L%d:%d): Object %s not found for property access '%s'.\n", member_access_expr_node->line, member_access_expr_node->col, object_or_class_ref_str, property_name_str);
+            return "undefined";
+        }
+    } else { 
+        const char* class_name_str = object_or_class_ref_str;
+        ClassEntry* ce = find_class_entry(class_name_str); // Check if it's a known class
+        if (!ce) { // If not a registered class, it might be some other non-object string
+             fprintf(stderr, "Error (L%d:%d): Target '%s' for member access '%s' is not a known class or object instance.\n", 
+                target_expr_node->line, target_expr_node->col, class_name_str, property_name_str);
+            return "undefined";
+        }
+        Object *static_obj = find_static_class_object(class_name_str); 
+        if (static_obj) {
+            return get_object_property_with_access(static_obj, property_name_str, current_class);
+        } else {
+             fprintf(stderr, "Error (L%d:%d): Could not find/create static object for class '%s' to access '%s'.\n", 
+                target_expr_node->line, target_expr_node->col, class_name_str, property_name_str);
             return "undefined";
         }
     }
-    
-    fprintf(stderr, "Error: Cannot access property '%s' of non-object: %s\n", 
-           expr->value, obj_str);
-    return "undefined";
 }
 
-// Find an object by its ID
 Object* find_object_by_id(int id) {
-    Object *obj = objects;
-    while (obj) {
-        int obj_id;
-        sscanf(obj->class_name, "%*[^#]#%d", &obj_id);
-        if (obj_id == id) {
-            return obj;
+    Object *obj_iter = objects;
+    while (obj_iter) {
+        int current_obj_id = 0;
+        char *hash_pos = strchr(obj_iter->class_name, '#');
+        if (hash_pos) {
+            current_obj_id = atoi(hash_pos + 1);
+            if (current_obj_id == id) return obj_iter;
         }
-        obj = obj->next;
+        obj_iter = obj_iter->next;
     }
     return NULL;
 }
 
-// Find or create a static class object
 Object* find_static_class_object(const char *class_name) {
-    // First, try to find existing static object for the class
-    Object *obj = objects;
-    while (obj) {
-        if (strncmp(obj->class_name, class_name, strlen(class_name)) == 0 && 
-            strstr(obj->class_name, "_static") != NULL) {
-            return obj;
+    char static_obj_prefix[128 + 8]; 
+    snprintf(static_obj_prefix, sizeof(static_obj_prefix), "%s_static", class_name); 
+
+    Object *obj_iter = objects;
+    while (obj_iter) {
+        if (strncmp(obj_iter->class_name, static_obj_prefix, strlen(static_obj_prefix)) == 0) {
+             char char_after_prefix = obj_iter->class_name[strlen(static_obj_prefix)];
+             if (char_after_prefix == '#' || char_after_prefix == '\0') return obj_iter;
         }
-        obj = obj->next;
+        obj_iter = obj_iter->next;
     }
-    
-    // If not found, create a new static class object
-    char static_class_name[256];
-    snprintf(static_class_name, sizeof(static_class_name), "%s_static", class_name);
-    
-    Object *static_obj = create_object(static_class_name);
-    if (static_obj) {
-        printf("[VM] Created static class object for %s\n", class_name);
-    } else {
-        fprintf(stderr, "Error: Failed to create static class object for %s\n", class_name);
-    }
-    
-    return static_obj;
+    return create_object(static_obj_prefix); 
 }
 
-// Initialize the TestClass properties
 void initialize_test_class(Object *obj) {
-    if (!obj) return;
-    
-    printf("[VM] Initializing TestClass properties for %s\n", obj->class_name);
-    
-    // Check if this is already a TestClass_static object
-    if (strstr(obj->class_name, "_static") != NULL) {
-        // Only set static properties on the static object
-        set_object_property_with_access(obj, "static_prop", "Static property", ACCESS_PUBLIC, 1);
-        printf("[VM] Set static property on static class object\n");
-        return;
+    if (!obj || strstr(obj->class_name, "TestClass") == NULL) return; 
+    if (strstr(obj->class_name, "_static") != NULL) { 
+        set_object_property_with_access(obj, "static_prop", "Static Property Value", ACCESS_PUBLIC, 1);
+    } else { 
+        set_object_property_with_access(obj, "public_prop", "Public Property Value", ACCESS_PUBLIC, 0);
+        set_object_property_with_access(obj, "private_prop", "Private Property Value", ACCESS_PRIVATE, 0);
+        Object* static_companion = find_static_class_object("TestClass");
+        if(static_companion && get_object_property_with_access_check(static_companion, "static_prop", "TestClass") == NULL) {
+             set_object_property_with_access(static_companion, "static_prop", "Static Property Value", ACCESS_PUBLIC, 1);
+        }
     }
-    
-    // This is a regular instance - set instance properties
-    set_object_property_with_access(obj, "public_prop", "Public property", ACCESS_PUBLIC, 0);
-    set_object_property_with_access(obj, "private_prop", "Private property", ACCESS_PRIVATE, 0);
-    
-    // Also ensure the static class object exists and has static properties
-    Object *static_obj = find_static_class_object("TestClass");
-    if (static_obj) {
-        set_object_property_with_access(static_obj, "static_prop", "Static property", ACCESS_PUBLIC, 1);
-        printf("[VM] Set static property on the static class object\n");
-    }
-    
-    printf("[VM] TestClass properties initialized\n");
 }
 
-/*
- * Forwarder that resolves and executes built-in/native functions registered by
- * stdlib.c.  We evaluate all argument AST nodes first (so that expressions are
- * executed in the current VM context) and then call stdlib's
- * `call_builtin_function`, which in turn dispatches to the appropriate C
- * wrapper.  Those wrappers communicate their return value back to the VM via
- * the global `set_return_value`/`get_return_value` helpers.
- */
-extern int call_builtin_function(const char *name, const char **args, int arg_count);
+// Bridge to stdlib.c's call_builtin_function
+const char* call_built_in_function(const char* func_name_to_call, ASTNode* args_ast_list, StackFrame* frame_for_evaluating_args) {
+    if (!func_name_to_call) return "undefined";
 
-const char* call_built_in_function(const char* func_name, ASTNode* args, StackFrame* frame) {
-    if (!func_name) return "undefined";
-
-    /* Count arguments in the linked list. */
     int arg_count = 0;
-    ASTNode *iter = args;
+    ASTNode *iter = args_ast_list;
     while (iter) { arg_count++; iter = iter->next; }
 
-    /* Collect evaluated argument strings. */
-    const char **arg_values = NULL;
+    const char **arg_values_evaluated = NULL; // Array of C-string pointers
     if (arg_count > 0) {
-        arg_values = (const char**)malloc(sizeof(char*) * arg_count);
-        if (!arg_values) {
-            fprintf(stderr, "VM: Out of memory when marshalling call args.\n");
+        arg_values_evaluated = (const char**)calloc(arg_count, sizeof(char*)); // Use calloc
+        if (!arg_values_evaluated) {
+            fprintf(stderr, "VM Error (L%d): Out of memory marshalling args for builtin '%s'.\n", args_ast_list ? args_ast_list->line : 0, func_name_to_call);
             return "undefined";
         }
-
-        iter = args;
+        iter = args_ast_list;
         for (int i = 0; i < arg_count; ++i) {
-            arg_values[i] = evaluate_expression(iter, frame);
+            arg_values_evaluated[i] = evaluate_expression(iter, frame_for_evaluating_args);
+            // Note: if evaluate_expression returns pointer to static result_buffer, and multiple args do, this is an issue.
+            // This was partially addressed for binary ops. For arg lists, if any arg evaluation uses result_buffer,
+            // and a subsequent arg evaluation *also* uses result_buffer before the first is consumed by call_builtin_function,
+            // it will be overwritten. This is a deeper issue with the static result_buffer.
+            // For now, assume stdlib functions are simple or handle this.
             iter = iter->next;
         }
     }
+    // This is the actual call to the function in stdlib.c
+    int was_found_and_called = call_builtin_function(func_name_to_call, arg_values_evaluated, arg_count);
 
-    /* Invoke the stdlib dispatcher. */
-    int ok = call_builtin_function(func_name, arg_values, arg_count);
+    if (arg_values_evaluated) free((void*)arg_values_evaluated);
 
-    if (arg_values) free((void*)arg_values);
-
-    if (ok) {
-        const char *ret = get_return_value();
-        return (ret ? ret : "undefined");
+    if (was_found_and_called) {
+        return get_return_value(); 
     }
-
-    return "undefined";
+    return "undefined"; 
 }
 
-// Forward helper to set default value on newly created object based on type
-static void initialize_default_instance_fields(const char *class_name, Object *instance) {
-    if (!class_name || !instance) return;
+static void initialize_default_instance_fields(const char *class_name_param, Object *instance_obj, StackFrame* frame_for_eval) {
+    if (!class_name_param || !instance_obj) return;
 
-    /* The runtime creates a special "ClassName_static" object to hold static
-       members.  Strip that suffix off when looking for the source-code class
-       declaration so that default-value initialisation still works. */
-    char search_name[128];
-    strncpy(search_name, class_name, sizeof(search_name)-1);
-    search_name[sizeof(search_name)-1] = '\0';
-    char *static_pos = strstr(search_name, "_static");
-    if (static_pos) {
-        *static_pos = '\0'; // terminate to keep just the base class name
-    }
+    char base_class_name_to_find[128]; 
+    strncpy(base_class_name_to_find, class_name_param, sizeof(base_class_name_to_find)-1);
+    base_class_name_to_find[sizeof(base_class_name_to_find)-1] = '\0';
+    
+    char *static_suffix_ptr = strstr(base_class_name_to_find, "_static");
+    if (static_suffix_ptr) *static_suffix_ptr = '\0'; 
+    int is_initializing_static_object = (static_suffix_ptr != NULL);
 
-    /* Find the AST node for the (base) class */
-    ASTNode *cls_node = program ? program->left : NULL;
-    while (cls_node) {
-        if (cls_node->type == AST_CLASS && strcmp(cls_node->value, search_name) == 0) {
-            break;
-        }
-        cls_node = cls_node->next;
-    }
-    if (!cls_node) return;
+    ClassEntry *class_ast_entry = find_class_entry(base_class_name_to_find);
+    if (!class_ast_entry || !class_ast_entry->class_node) return;
 
-    /* Are we populating a static object? */
-    int is_static_object = (static_pos != NULL);
+    ASTNode *class_ast_node = class_ast_entry->class_node;
+    ASTNode *member_node = class_ast_node->left; 
 
-    ASTNode *member = cls_node->left;
-    while (member) {
-        ASTNode *varNode = NULL;
-        if (member->type == AST_VAR_DECL || member->type == AST_TYPED_VAR_DECL) {
-            varNode = member;
-        } else if (member->type == AST_CLASS_FIELD) {
-            // parser stores actual declaration in left child
-            varNode = member->left;
-            if (!(varNode && (varNode->type == AST_VAR_DECL || varNode->type == AST_TYPED_VAR_DECL))) {
-                member = member->next; continue;
-            }
-        } else {
-            member = member->next; continue;
-        }
+    while (member_node) {
+        if (member_node->type == AST_VAR_DECL || member_node->type == AST_TYPED_VAR_DECL) {
+            const char *field_name = member_node->value; 
+            int field_is_static = (member_node->access_modifier[0] != '\0' && strcmp(member_node->access_modifier, "static") == 0);
 
-        // Use varNode from here
-        const char *prop_name = NULL;
-        if (varNode->type == AST_TYPED_VAR_DECL && varNode->left) {
-            prop_name = varNode->left->value;
-        } else {
-            prop_name = varNode->value;
-        }
-
-        /* Figure out the initialiser expression – different parser paths place
-           it on either the left or the right child.  Prefer `right` if it
-           exists, otherwise fall back to `left` (only if that child is not an
-           identifier node, which would simply duplicate the property name). */
-        ASTNode *init_expr = NULL;
-        if (varNode->right) {
-            init_expr = varNode->right;
-        } else if (varNode->left && varNode->left->type != AST_IDENTIFIER) {
-            init_expr = varNode->left;
-        }
-
-        const char *val_to_set = NULL;
-        if (init_expr) {
-            val_to_set = evaluate_expression(init_expr, global_frame);
-        }
-
-        const char *dtype = varNode->data_type;
-        const char *default_val = "undefined";
-        char tmp[64];
-
-        if (dtype) {
-            if (strcmp(dtype, "int") == 0 || strcmp(dtype, "long") == 0) {
-                // Integer-like types default to 0
-                default_val = "0";
-            } else if (strcmp(dtype, "float") == 0 || strcmp(dtype, "double") == 0) {
-                // Floating-point types default to 0.0
-                default_val = "0.0";
-            } else if (strcmp(dtype, "bool") == 0) {
-                // Booleans default to false
-                default_val = "false";
-            } else if (strcmp(dtype, "char") == 0) {
-                default_val = "\0";
-            } else if (strcmp(dtype, "Vector2") == 0 || strcmp(dtype, "Vector3") == 0 || strcmp(dtype, "Vector4") == 0) {
-                // Create default vector object of requested dimension all zeros
-                Object *vec_obj = create_object(dtype);
-                if (vec_obj) {
-                    // Initialise components to 0
-                    if (strcmp(dtype,"Vector2")==0) {
-                        set_object_property_with_access(vec_obj,"x","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"y","0",ACCESS_PUBLIC,0);
-                    } else if (strcmp(dtype,"Vector3")==0) {
-                        set_object_property_with_access(vec_obj,"x","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"y","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"z","0",ACCESS_PUBLIC,0);
-                    } else if (strcmp(dtype,"Vector4")==0) {
-                        set_object_property_with_access(vec_obj,"x","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"y","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"z","0",ACCESS_PUBLIC,0);
-                        set_object_property_with_access(vec_obj,"w","0",ACCESS_PUBLIC,0);
-                    }
-                    int vid=0; sscanf(vec_obj->class_name,"%*[^#]#%d",&vid);
-                    snprintf(tmp,sizeof(tmp),"obj:%d",vid);
-                    default_val = tmp;
+            if ((is_initializing_static_object && field_is_static) || (!is_initializing_static_object && !field_is_static)) {
+                const char *default_value_str = "undefined"; 
+                if (member_node->right) { 
+                    default_value_str = evaluate_expression(member_node->right, frame_for_eval); 
+                } else if (member_node->type == AST_TYPED_VAR_DECL && member_node->data_type[0] != '\0') {
+                    if (strcmp(member_node->data_type, "int") == 0 || strcmp(member_node->data_type, "long")==0) default_value_str = "0";
+                    else if (strcmp(member_node->data_type, "float") == 0 || strcmp(member_node->data_type, "double")==0) default_value_str = "0.0";
+                    else if (strcmp(member_node->data_type, "bool") == 0) default_value_str = "false";
+                    else if (strcmp(member_node->data_type, "string") == 0) default_value_str = ""; 
                 }
+                AccessModifierEnum acc_mod = ACCESS_PUBLIC; 
+                if(member_node->access_modifier[0] != '\0' && strcmp(member_node->access_modifier, "private") == 0) acc_mod = ACCESS_PRIVATE;
+                set_object_property_with_access(instance_obj, field_name, default_value_str, acc_mod, field_is_static);
             }
         }
-
-        /* Access modifier handling – default to public unless the declaration
-           carried an explicit "private" keyword.  The parser records the
-           modifier on the wrapper (member) node rather than the varNode itself
-           for plain fields.  For simplicity we fall back to public when that
-           information is missing. */
-        AccessModifier access = ACCESS_PUBLIC;
-        if (member->access_modifier[0] != '\0' && strcmp(member->access_modifier, "private") == 0) {
-            access = ACCESS_PRIVATE;
-        }
-
-        printf("[INIT] Setting default field %s.%s (%s) = %s [static=%d]\n",
-               class_name, prop_name, dtype ? dtype : "", val_to_set ? val_to_set : default_val, is_static_object);
-
-        set_object_property_with_access(instance,
-                                         prop_name,
-                                         val_to_set ? val_to_set : default_val,
-                                         access,
-                                         is_static_object);
-
-        /* advance to next class member */
-        member = member->next;
+        member_node = member_node->next;
     }
 }

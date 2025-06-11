@@ -4,7 +4,7 @@
 #include "ast_types.h"
 
 // Create a new AST node
-ASTNode* create_node(ASTNodeType type, const char* value) {
+ASTNode* create_node(ASTNodeType type, const char* value, int line, int col) { // Added line, col
     ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
     if (!node) {
         fprintf(stderr, "Error: Failed to allocate memory for AST node\n");
@@ -23,6 +23,9 @@ ASTNode* create_node(ASTNodeType type, const char* value) {
     node->right = NULL;
     node->next = NULL;
     
+    node->line = line; // Initialize line
+    node->col = col;   // Initialize col
+    
     // Initialize other fields
     node->data_type[0] = '\0';
     node->generic_type[0] = '\0';
@@ -30,7 +33,7 @@ ASTNode* create_node(ASTNodeType type, const char* value) {
     node->is_array = 0;
     node->array_size = 0;
     node->access_modifier[0] = '\0';
-    node->parent_class = NULL;
+    node->parent_class_name = NULL; // Changed from parent_class
     
     return node;
 }
@@ -88,7 +91,7 @@ void print_ast(ASTNode* node, int indent) {
     if (!node) return;
     
     print_indent(indent);
-    printf("%s: %s", node_type_to_string(node->type), node->value);
+    printf("%s: %s (L%d:C%d)", node_type_to_string(node->type), node->value, node->line, node->col); // Added line/col
     
     // Print type information if available
     if (node->data_type[0] != '\0') {
@@ -116,6 +119,11 @@ void print_ast(ASTNode* node, int indent) {
     // Print access modifier if present
     if (node->access_modifier[0] != '\0') {
         printf(" [%s]", node->access_modifier);
+    }
+    
+    // Print parent class if present (for methods)
+    if (node->parent_class_name) {
+        printf(" [ParentClass: %s]", node->parent_class_name);
     }
     
     printf("\n");
@@ -150,11 +158,11 @@ void free_ast(ASTNode* node) {
     free_ast(node->next);
     
     // Free parent class name if allocated
-    if (node->parent_class) {
-        free(node->parent_class);
-        node->parent_class = NULL;
+    if (node->parent_class_name) { // Changed from parent_class
+        free(node->parent_class_name);
+        node->parent_class_name = NULL;
     }
     
     // Free this node
     free(node);
-} 
+}

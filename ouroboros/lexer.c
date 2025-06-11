@@ -4,353 +4,266 @@
 #include <stdlib.h>
 #include "lexer.h"
 
-static int string_pos = 0;
-static const char* source_string = NULL;
+// --- Globals for string lexing ---
+static const char* current_source_string = NULL;
+static int current_string_pos = 0;
+static int current_line_lex = 1;
+static int current_col_lex = 1;
+// ---
 
-static int string_getc() {
-    if (!source_string || source_string[string_pos] == '\0')
+static int string_getc_lex() {
+    if (!current_source_string || current_source_string[current_string_pos] == '\0')
         return EOF;
-    return source_string[string_pos++];
+    return current_source_string[current_string_pos++];
 }
 
-static void string_ungetc() {
-    if (string_pos > 0)
-        string_pos--;
+static void string_ungetc_lex() {
+    if (current_string_pos > 0)
+        current_string_pos--;
 }
 
-static int peek_string() {
-    if (!source_string || source_string[string_pos] == '\0')
+static int string_peek_lex() {
+    if (!current_source_string || current_source_string[current_string_pos] == '\0')
         return EOF;
-    return source_string[string_pos];
+    return current_source_string[current_string_pos];
 }
 
-static int peek(FILE *file) {
-    int c = fgetc(file);
-    ungetc(c, file);
-    return c;
-}
-
-static void skip_whitespace_string(int *line, int *col) {
+static void skip_whitespace_and_comments_string() {
     int c;
-    while ((c = string_getc()) != EOF) {
-        if (c == ' ' || c == '\t') {
-            (*col)++;
+    while ((c = string_getc_lex()) != EOF) {
+        if (c == ' ' || c == '\t' || c == '\r') { // Added \r
+            current_col_lex++;
         } else if (c == '\n') {
-            (*line)++;
-            *col = 1;
-        } else if (c == '/' && peek_string() == '/') {
-            while ((c = string_getc()) != '\n' && c != EOF);
-            (*line)++;
-            *col = 1;
-        } else if (c == '/' && peek_string() == '*') {
-            // Multi-line comment: /* ... */
-            string_getc(); // consume '*'
-            (*col) += 2; // for /*
-            while ((c = string_getc()) != EOF) {
-                (*col)++;
+            current_line_lex++;
+            current_col_lex = 1;
+        } else if (c == '/' && string_peek_lex() == '/') { // Single-line comment
+            current_col_lex += 2;
+            while ((c = string_getc_lex()) != '\n' && c != EOF) { current_col_lex++; }
+            if (c == '\n') { // Consumed the newline
+                current_line_lex++;
+                current_col_lex = 1;
+            }
+        } else if (c == '/' && string_peek_lex() == '*') { // Multi-line comment
+            string_getc_lex(); // consume '*'
+            current_col_lex += 2; 
+            while ((c = string_getc_lex()) != EOF) {
                 if (c == '*') {
-                    if (peek_string() == '/') {
-                        string_getc(); // consume '/'
-                        (*col)++;
-                        break; // End of multi-line comment
-                    }
+                    if (string_peek_lex() == '/') {
+                        string_getc_lex(); // consume '/'
+                        current_col_lex += 2;
+                        break; 
+                    } else { current_col_lex++; }
                 } else if (c == '\n') {
-                    (*line)++;
-                    *col = 1;
+                    current_line_lex++;
+                    current_col_lex = 1;
+                } else {
+                    current_col_lex++;
                 }
             }
+             if (c == EOF) { /* Unterminated comment, error reported by parser usually */ }
         } else {
-            string_ungetc();
+            string_ungetc_lex(); // Put back non-whitespace/comment char
             break;
         }
     }
 }
 
-static void skip_whitespace(FILE *file, int *line, int *col) {
-    int c;
-    while ((c = fgetc(file)) != EOF) {
-        if (c == ' ' || c == '\t') {
-            (*col)++;
-        } else if (c == '\n') {
-            (*line)++;
-            *col = 1;
-        } else if (c == '/' && peek(file) == '/') {
-            while ((c = fgetc(file)) != '\n' && c != EOF);
-            (*line)++;
-            *col = 1;
-        } else if (c == '/' && peek(file) == '*') {
-            // Multi-line comment: /* ... */
-            fgetc(file); // consume '*'
-            (*col) += 2; // for /*
-            while ((c = fgetc(file)) != EOF) {
-                (*col)++;
-                if (c == '*') {
-                    if (peek(file) == '/') {
-                        fgetc(file); // consume '/'
-                        (*col)++;
-                        break; // End of multi-line comment
-                    }
-                } else if (c == '\n') {
-                    (*line)++;
-                    *col = 1;
-                }
-            }
-        } else {
-            ungetc(c, file);
-            break;
-        }
-    }
-}
 
-static int is_symbol(int c) {
-    // Added '<', '>' for generics, ':' for type declarations
+static int is_lexer_symbol(int c) {
     return strchr("(){}[];,:.<>", c) != NULL;
 }
 
-static int is_operator_char(int c) {
+static int is_lexer_operator_char_start(int c) { // Chars that can start an operator
     return strchr("+-*/%=&|!<>", c) != NULL;
 }
 
+
 static const char *keywords[] = {
-    "let", "const", "fn", "function", "return", "if", "else", "while", "for", "true", "false",
-    "class", "new", "import", "public", "private", "protected", "static", "null", "var",
-    // Added new keywords for types and OOP
-    "int", "float", "bool", "string", "void", "print", "struct", "this", "extends"
+    "let", "const", "var", "function", "return", "if", "else", "while", "for", 
+    "true", "false", "null",
+    "class", "new", "this", "extends", "static", 
+    "public", "private", // "protected" could be added
+    "import", "print", 
+    "struct",
+    // Built-in types are also keywords to the lexer to distinguish from identifiers
+    "int", "float", "bool", "string", "void", "any", "array", "object" 
 };
 
-static int is_keyword(const char *text) {
-    for (int i = 0; i < (int)(sizeof(keywords)/sizeof(keywords[0])); i++) {
+static int is_lexer_keyword(const char *text) {
+    for (size_t i = 0; i < sizeof(keywords)/sizeof(keywords[0]); i++) {
         if (strcmp(text, keywords[i]) == 0) return 1;
     }
     return 0;
 }
 
-Token next_token(FILE *file, int *line, int *col) {
-    skip_whitespace(file, line, col);
+static Token get_next_token_from_string() {
+    skip_whitespace_and_comments_string();
 
-    Token tok = { TOKEN_EOF, "", *line, *col };
-    int c = fgetc(file);
+    Token tok = { TOKEN_EOF, "", current_line_lex, current_col_lex };
+    int c = string_getc_lex();
+
     if (c == EOF) return tok;
 
-    if (isalpha(c) || c == '_') {
+    tok.line = current_line_lex; // Capture start line/col for this token
+    tok.col = current_col_lex;
+
+    if (isalpha(c) || c == '_') { // Identifiers or Keywords
         int i = 0;
         tok.text[i++] = c;
-        while ((c = fgetc(file)) != EOF && (isalnum(c) || c == '_')) {
+        current_col_lex++;
+        while ((c = string_getc_lex()) != EOF && (isalnum(c) || c == '_')) {
             if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+            current_col_lex++;
         }
         tok.text[i] = '\0';
-        if (c != EOF) ungetc(c, file);
-        tok.type = is_keyword(tok.text) ? TOKEN_KEYWORD :
-                   (strcmp(tok.text, "true") == 0 || strcmp(tok.text, "false") == 0 ? TOKEN_BOOL : TOKEN_IDENTIFIER);
-    } else if (isdigit(c)) {
-        int i = 0;
-        tok.text[i++] = c;
-
-        // Hexadecimal literal? 0xFF style
-        if (c == '0' && (peek(file) == 'x' || peek(file) == 'X')) {
-            // Consume the 'x' or 'X'
-            c = fgetc(file);
-            tok.text[i++] = c;
-            // Read hex digits
-            while ((c = fgetc(file)) != EOF && isxdigit(c)) {
-                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+        if (c != EOF) string_ungetc_lex();
+        
+        if (is_lexer_keyword(tok.text)) {
+            tok.type = TOKEN_KEYWORD;
+            if (strcmp(tok.text, "true") == 0 || strcmp(tok.text, "false") == 0) {
+                tok.type = TOKEN_BOOL; // Specific type for bool literals
             }
         } else {
-            // Decimal / float literal path
-            while ((c = fgetc(file)) != EOF && isdigit(c)) {
-                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-            }
-            // Check for decimal point
-            if (c == '.') {
-                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-                while ((c = fgetc(file)) != EOF && isdigit(c)) {
-                    if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-                }
-            }
+            tok.type = TOKEN_IDENTIFIER;
         }
-        tok.text[i] = '\0';
-        if (c != EOF) ungetc(c, file);
-        tok.type = TOKEN_NUMBER;
-    } else if (c == '"') {
+    } else if (isdigit(c) || (c == '.' && isdigit(string_peek_lex()))) { // Numbers (int or float, or starting with .)
         int i = 0;
-        while ((c = fgetc(file)) != '"' && c != EOF) {
-            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-        }
-        tok.text[i] = '\0';
-        tok.type = TOKEN_STRING;
-    } else if (is_operator_char(c)) {
-        int i = 0;
-        tok.text[i++] = c;
-        if (is_operator_char(peek(file))) {
-            tok.text[i++] = fgetc(file);
-        }
-        tok.text[i] = '\0';
-        tok.type = TOKEN_OPERATOR;
-    } else if (is_symbol(c)) {
-        tok.text[0] = c;
-        tok.text[1] = '\0';
-        tok.type = TOKEN_SYMBOL;
-    }
-
-    return tok;
-}
-
-Token next_token_string(int *line, int *col) {
-    skip_whitespace_string(line, col);
-
-    Token tok = { TOKEN_EOF, "", *line, *col };
-    int c = string_getc();
-    if (c == EOF) return tok;
-
-    if (isalpha(c) || c == '_') {
-        int i = 0;
-        tok.text[i++] = c;
-        (*col)++;
-        while ((c = string_getc()) != EOF && (isalnum(c) || c == '_')) {
-            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-            (*col)++;
-        }
-        tok.text[i] = '\0';
-        if (c != EOF) string_ungetc();
-        tok.type = is_keyword(tok.text) ? TOKEN_KEYWORD :
-                  (strcmp(tok.text, "true") == 0 || strcmp(tok.text, "false") == 0 ? TOKEN_BOOL : TOKEN_IDENTIFIER);
-    } else if (isdigit(c)) {
-        int i = 0;
-        tok.text[i++] = c;
-        (*col)++;
-
-        // Hexadecimal literal? 0xFF style
-        if (c == '0' && (peek_string() == 'x' || peek_string() == 'X')) {
-            // Consume the 'x' or 'X'
-            c = string_getc();
+        int has_decimal = 0;
+        if (c == '.') { // Starts with '.', e.g. .5
+            tok.text[i++] = '0'; // Prepend 0 for standard float format if desired, or keep as is
             tok.text[i++] = c;
-            (*col)++;
-            // Read hex digits
-            while ((c = string_getc()) != EOF && isxdigit(c)) {
-                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-                (*col)++;
-            }
-            tok.text[i] = '\0';
-            tok.type = TOKEN_NUMBER;
+            has_decimal = 1;
+            current_col_lex++;
         } else {
-            // Decimal / float literal path
-            while ((c = string_getc()) != EOF && isdigit(c)) {
+            tok.text[i++] = c;
+            current_col_lex++;
+        }
+
+        while ((c = string_getc_lex()) != EOF) {
+            if (isdigit(c)) {
                 if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                current_col_lex++;
+            } else if (c == '.' && !has_decimal) { // Only one decimal point allowed
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                has_decimal = 1;
+                current_col_lex++;
+            } else if ((c == 'e' || c == 'E') && i > 0 && isdigit(tok.text[i-1])) { // Scientific notation
+                if (i < (int)sizeof(tok.text) - 2) { // Need space for 'e' and at least one digit/sign
+                    tok.text[i++] = c;
+                    current_col_lex++;
+                    c = string_peek_lex();
+                    if (c == '+' || c == '-') {
+                        tok.text[i++] = string_getc_lex();
+                        current_col_lex++;
+                    }
+                    if (!isdigit(string_peek_lex())) { // Must be followed by digits
+                        fprintf(stderr, "Lexer Error (L%d:%d): Malformed exponent in number.\n", tok.line, tok.col + i);
+                        tok.type = TOKEN_UNKNOWN; // Or error
+                        // Unget 'e' and potentially sign if they were part of an identifier
+                        // This part is tricky for error recovery.
+                        break; 
+                    }
+                } else break; // Not enough space for exponent
             }
-            // Check for decimal point
-            if (c == '.') {
-                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-                (*col)++;
-                while ((c = string_getc()) != EOF && isdigit(c)) {
-                    if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
-                    (*col)++;
-                }
+            else {
+                if (c != EOF) string_ungetc_lex();
+                break;
             }
         }
         tok.text[i] = '\0';
-        if (c != EOF) string_ungetc();
         tok.type = TOKEN_NUMBER;
-    } else if (c == '"') {
+
+    } else if (c == '"') { // String literals
         int i = 0;
-        (*col)++; // For opening quote
-        while ((c = string_getc()) != EOF && c != '"') {
-            if (c == '\n') {
-                (*line)++;
-                *col = 1;
+        current_col_lex++; // For opening quote
+        while ((c = string_getc_lex()) != EOF) {
+            current_col_lex++;
+            if (c == '"') break; // End of string
+            if (c == '\\') { // Escape sequence
+                int next_char = string_getc_lex();
+                current_col_lex++;
+                if (next_char == EOF) { /* Unterminated escape */ break; }
+                switch (next_char) {
+                    case 'n': tok.text[i++] = '\n'; break;
+                    case 't': tok.text[i++] = '\t'; break;
+                    case 'r': tok.text[i++] = '\r'; break;
+                    case '\\': tok.text[i++] = '\\'; break;
+                    case '"': tok.text[i++] = '"'; break;
+                    default: tok.text[i++] = next_char; break; // Store as is
+                }
             } else {
-                (*col)++;
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
             }
-            if (c == '\\' && peek_string() != EOF) {
-                // Handle escape sequences
-                c = string_getc();
-                (*col)++;
-                switch (c) {
-                    case 'n': c = '\n'; break;
-                    case 't': c = '\t'; break;
-                    case 'r': c = '\r'; break;
-                    case '\\': c = '\\'; break;
-                    case '"': c = '"'; break;
-                    default: break;
-                }
-            }
-            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+            if (i >= (int)sizeof(tok.text) -1) { /* String too long */ break;}
         }
         tok.text[i] = '\0';
-        if (c == '"') (*col)++; // For closing quote
+        if (c != '"') { /* Unterminated string */ }
         tok.type = TOKEN_STRING;
-    } else if (is_operator_char(c)) {
+    } else if (is_lexer_operator_char_start(c)) { // Operators
         int i = 0;
         tok.text[i++] = c;
-        (*col)++;
-        if (is_operator_char(peek_string())) {
-            tok.text[i++] = string_getc();
-            (*col)++;
+        current_col_lex++;
+        // Check for multi-character operators like ==, !=, <=, >=, &&, ||
+        char next_c = string_peek_lex();
+        if ((c == '=' && next_c == '=') || (c == '!' && next_c == '=') ||
+            (c == '<' && next_c == '=') || (c == '>' && next_c == '=') ||
+            (c == '&' && next_c == '&') || (c == '|' && next_c == '|')) {
+            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = string_getc_lex();
+            current_col_lex++;
         }
         tok.text[i] = '\0';
         tok.type = TOKEN_OPERATOR;
-    } else if (is_symbol(c)) {
+    } else if (is_lexer_symbol(c)) { // Single character symbols
         tok.text[0] = c;
         tok.text[1] = '\0';
-        (*col)++;
+        current_col_lex++;
         tok.type = TOKEN_SYMBOL;
-    } else {
-        // Unknown character - add as a symbol to avoid infinite loop
+    } else { // Unknown character
         tok.text[0] = c;
         tok.text[1] = '\0';
-        (*col)++;
-        tok.type = TOKEN_SYMBOL;
-        fprintf(stderr, "Warning: Unknown character '%c' at line %d, col %d\n", c, *line, *col);
+        current_col_lex++;
+        tok.type = TOKEN_UNKNOWN; // Mark as unknown
+        fprintf(stderr, "Lexer Warning (L%d:%d): Unknown character '%c' (ASCII %d).\n", tok.line, tok.col, c, c);
     }
-
     return tok;
 }
 
-// Function to lex a source string and return array of tokens
+
 Token* lex(const char* source) {
-    // Store the source string globally
-    source_string = source;
-    string_pos = 0;
+    current_source_string = source;
+    current_string_pos = 0;
+    current_line_lex = 1;
+    current_col_lex = 1;
     
-    // Allocate initial token array
-    int capacity = 128;
-    Token* tokens = (Token*)malloc(capacity * sizeof(Token));
-    if (!tokens) {
-        fprintf(stderr, "Error: Memory allocation failed\n");
+    int capacity = 256; // Initial capacity
+    Token* tokens_list = (Token*)malloc(capacity * sizeof(Token));
+    if (!tokens_list) {
+        fprintf(stderr, "Lexer Error: Memory allocation failed for tokens list.\n");
         return NULL;
     }
     
-    // Lex the source
-    int line = 1, col = 1;
     int count = 0;
-    
     while (1) {
-        // Resize array if needed
         if (count >= capacity) {
             capacity *= 2;
-            tokens = (Token*)realloc(tokens, capacity * sizeof(Token));
-            if (!tokens) {
-                fprintf(stderr, "Error: Memory allocation failed\n");
+            Token* new_tokens_list = (Token*)realloc(tokens_list, capacity * sizeof(Token));
+            if (!new_tokens_list) {
+                fprintf(stderr, "Lexer Error: Memory reallocation failed for tokens list.\n");
+                free(tokens_list);
                 return NULL;
             }
+            tokens_list = new_tokens_list;
         }
         
-        // Get next token from string
-        tokens[count] = next_token_string(&line, &col);
-        
-        // Stop when we reach EOF
-        if (tokens[count].type == TOKEN_EOF) {
-            count++; // Include EOF token
-            break;
+        tokens_list[count] = get_next_token_from_string();
+        if (tokens_list[count].type == TOKEN_EOF) {
+            // Do not increment count for the final EOF if we want count to be actual number of non-EOF tokens
+            // But parser expects EOF at tokens[count], so include it.
+            break; 
         }
-        
         count++;
     }
-    
-    // Add a sentinel NULL token at the end
-    tokens[count].type = TOKEN_EOF;
-    tokens[count].text[0] = '\0';
-    tokens[count].line = line;
-    tokens[count].col = col;
-    
-    return tokens;
+    // The loop breaks when EOF is current token, so tokens_list[count] is EOF.
+    // No need to add another sentinel if the loop condition is `while(1)` and break on EOF.
+    return tokens_list;
 }

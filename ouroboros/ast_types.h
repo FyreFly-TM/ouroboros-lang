@@ -47,6 +47,10 @@ typedef struct ASTNode {
     struct ASTNode *right;
     struct ASTNode *next;
     
+    // Line and column for error reporting
+    int line;
+    int col;
+
     // New fields for type information
     char data_type[64];      // Data type (int, float, Vector2D, etc.)
     char generic_type[64];   // Generic type parameter (T, U, etc.)
@@ -56,13 +60,13 @@ typedef struct ASTNode {
     
     // Access modifiers for object properties
     char access_modifier[16]; // "public", "private", "static"
-    char* parent_class;      // Parent class name for methods (for visibility checks)
+    char* parent_class_name; // Name of parent class for methods (strdup'd)
 } ASTNode;
 
 // Function prototypes
-ASTNode* create_node(ASTNodeType type, const char* value);
+ASTNode* create_node(ASTNodeType type, const char* value, int line, int col); // Updated signature
 void print_ast(ASTNode* node, int level);
 const char* node_type_to_string(ASTNodeType type);
 void free_ast(ASTNode* node);
 
-#endif // AST_TYPES_H 
+#endif // AST_TYPES_H

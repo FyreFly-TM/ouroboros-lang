@@ -1,29 +1,37 @@
 {
   "name": "Ouroboros",
   "scopeName": "source.ouroboros",
-  "fileTypes": ["ouro"],
+  "fileTypes": [ "ouro" ],
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#keywords" },
-    { "include": "#types" },
-    { "include": "#functions" },
-    { "include": "#constants" },
+    { "include": "#numbers" },
     { "include": "#operators" },
-    { "include": "#variables" }
+    { "include": "#storage-modifiers" },
+    { "include": "#type-annotations" },
+    { "include": "#class-definitions" },
+    { "include": "#struct-definitions" },
+    { "include": "#function-definitions" },
+    { "include": "#function-calls" },
+    { "include": "#member-access" },
+    { "include": "#variables-and-parameters" },
+    { "include": "#punctuation" }
   ],
   "repository": {
     "comments": {
       "patterns": [
         {
           "name": "comment.line.double-slash.ouroboros",
-          "begin": "//",
-          "end": "\\n"
+          "match": "//.*"
         },
         {
           "name": "comment.block.ouroboros",
           "begin": "/\\*",
-          "end": "\\*/"
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
         }
       ]
     },
@@ -36,8 +44,19 @@
           "patterns": [
             {
               "name": "constant.character.escape.ouroboros",
-              "match": "\\\\."
+              "match": "\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4})"
             }
+            /*
+            // If you add string interpolation like `Hello, ${name}!`
+            {
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "name": "punctuation.definition.interpolation.ouroboros",
+              "patterns": [
+                { "include": "source.ouroboros" } // Recurse into Ouroboros syntax
+              ]
+            }
+            */
           ]
         },
         {
@@ -56,75 +75,24 @@
     "keywords": {
       "patterns": [
         {
-          "name": "keyword.control.ouroboros",
-          "match": "\\b(if|else|while|for|return|function|import|new|this)\\b"
+          "name": "keyword.control.flow.ouroboros",
+          "match": "\\b(if|else|while|for|return|break|continue|switch|case|default)\\b"
         },
         {
-          "name": "keyword.other.ouroboros",
-          "match": "\\b(let|var|struct|class|void)\\b"
-        }
-      ]
-    },
-    "types": {
-      "patterns": [
-        {
-          "name": "storage.type.ouroboros",
-          "match": "\\b(int|float|string|bool|T|U)\\b"
+          "name": "keyword.declaration.ouroboros",
+          "match": "\\b(let|var|const|function|fn|class|struct|enum|interface|module|import|package)\\b"
         },
         {
-          "match": "\\b([A-Z][a-zA-Z0-9_]*)\\b(?!\\s*\\()",
-          "name": "entity.name.type.ouroboros"
+          "name": "keyword.oop.ouroboros",
+          "match": "\\b(new|this|super|extends|implements|instanceof)\\b"
         },
         {
-          "match": "<([a-zA-Z_][a-zA-Z0-9_]*)>",
-          "captures": {
-            "1": {
-              "name": "storage.type.generic.ouroboros"
-            }
-          }
-        }
-      ]
-    },
-    "functions": {
-      "patterns": [
-        {
-          "match": "\\b(void|int|float|string|bool|[A-Z][a-zA-Z0-9_]*)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
-          "captures": {
-            "1": {
-              "name": "storage.type.function.return.ouroboros"
-            },
-            "2": {
-              "name": "entity.name.function.ouroboros"
-            }
-          }
+          "name": "keyword.modifier.ouroboros",
+          "match": "\\b(public|private|protected|static|final|abstract|async|await|yield)\\b"
         },
         {
-          "match": "\\bfunction\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.ouroboros"
-            }
-          }
-        },
-        {
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.call.ouroboros"
-            }
-          }
-        },
-        {
-          "name": "support.function.ouroboros",
-          "match": "\\b(print|to_string|to_float|sqrt|opengl_init|opengl_create_context|opengl_create_shader|opengl_use_shader|opengl_create_buffer|opengl_bind_buffer|opengl_buffer_data|opengl_draw_arrays|opengl_clear|opengl_swap_buffers|opengl_destroy_context|opengl_is_context_valid)\\b"
-        }
-      ]
-    },
-    "constants": {
-      "patterns": [
-        {
-          "name": "constant.numeric.ouroboros",
-          "match": "\\b([0-9]+(\\.([0-9]+)?)?|\\.[0-9]+)\\b"
+          "name": "keyword.operator.word.ouroboros",
+          "match": "\\b(as|in|is|typeof)\\b"
         },
         {
           "name": "constant.language.ouroboros",
@@ -132,41 +100,292 @@
         }
       ]
     },
+    "storage-modifiers": {
+      "patterns": [
+        {
+          "name": "storage.modifier.ouroboros",
+          "match": "\\b(static|public|private|const|final|abstract)\\b"
+        }
+      ]
+    },
+    "type-annotations": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.ouroboros",
+          "match": "\\b(int|long|float|double|bool|boolean|string|char|void|any|array|object|map|Vector2|Vector3|Vector4)\\b"
+        },
+        {
+          "comment": "User-defined types (PascalCase convention) used in annotations or extends",
+          "match": "\\b([A-Z][a-zA-Z0-9_]*)(?:\\[\\])?(?:<[\\w\\s,<>\\[\\]]+>)?\\b",
+          "name": "entity.name.type.ouroboros"
+        },
+        {
+          "comment": "Array type specifier",
+          "match": "(\\[\\])",
+          "name": "storage.type.array.ouroboros"
+        },
+        {
+          "comment": "Generic type parameters like <T, U> or <T[]>",
+          "begin": "<",
+          "end": ">",
+          "name": "storage.type.generic.ouroboros",
+          "patterns": [
+            { "include": "#type-annotations" }, // Allow nested types like List<AnotherType>
+            {
+              "name": "punctuation.definition.generic.ouroboros",
+              "match": ",|(<)|(>)"
+            }
+          ]
+        }
+      ]
+    },
+    "class-definitions": {
+      "patterns": [
+        {
+          "name": "meta.class.ouroboros",
+          "begin": "\\b(class)\\s+([A-Z_][A-Za-z0-9_]*)(\\s*<[^>]+>)?(?:\\s*(extends)\\s*([A-Z_][A-Za-z0-9_]*)(?:\\s*<[^>]+>)?)?",
+          "beginCaptures": {
+            "1": { "name": "storage.type.class.ouroboros" }, // "class" keyword
+            "2": { "name": "entity.name.type.class.ouroboros" }, // Class name
+            "3": { "name": "storage.type.generic.ouroboros" }, // Optional generics for the class itself
+            "4": { "name": "storage.modifier.extends.ouroboros" }, // "extends" keyword
+            "5": { "name": "entity.other.inherited-class.ouroboros" } // Superclass name
+          },
+          "end": "\\{", // Ends when body starts, or could end on semicolon for forward decl
+          "endCaptures": {
+            "0": { "name": "punctuation.section.class.begin.ouroboros" }
+          },
+          "patterns": [
+            { "include": "#comments" } // Allow comments before the body
+          ]
+        }
+      ]
+    },
+    "struct-definitions": {
+      "patterns": [
+        {
+          "name": "meta.struct.ouroboros",
+          "begin": "\\b(struct)\\s+([A-Z_][A-Za-z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "storage.type.struct.ouroboros" },
+            "2": { "name": "entity.name.type.struct.ouroboros" }
+          },
+          "end": "\\{",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.struct.begin.ouroboros" }
+          }
+        }
+      ]
+    },
+    "function-definitions": {
+      "patterns": [
+        {
+          "name": "meta.function.definition.ouroboros",
+          "comment": "Matches: (type | void) funcName<generics>(params): type {",
+          "begin": "(?x)\\b\n                (?: (?<return_type> (?: void | \\b(?:int|float|string|bool|array|object|map|Vector[234]) | [A-Z_][A-Za-z0-9_]* (?: \\s*<[^>]+> )? ) ( \\s*\\[\\] )? ) \\s+)? # Optional return type\n                (?<func_keyword>\\b(?:function|fn)\\b\\s+)? # Optional function keyword\n                (?<func_name>[a-zA-Z_][a-zA-Z0-9_]*) # Function Name\n                (\\s*<[^>]+>)? # Optional generic parameters for the function itself\n                \\s*(\\() # Opening parenthesis for parameters",
+          "beginCaptures": {
+            "return_type": { "name": "storage.type.function.return.ouroboros" },
+            "func_keyword": { "name": "keyword.declaration.function.ouroboros" },
+            "func_name": { "name": "entity.name.function.definition.ouroboros" },
+            "3": { "name": "storage.type.generic.ouroboros" },
+            "4": { "name": "punctuation.definition.parameters.begin.ouroboros" }
+          },
+          "end": "\\{", // Ends when function body starts
+          "endCaptures": {
+            "0": { "name": "punctuation.section.function.begin.ouroboros" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { // Parameters
+              "begin": "\\(", // This might re-trigger if not careful, but end pattern is {
+              "end": "\\)",
+              "name": "meta.function.parameters.ouroboros",
+              "beginCaptures": { "0": { "name": "punctuation.definition.parameters.begin.ouroboros" } },
+              "endCaptures": { "0": { "name": "punctuation.definition.parameters.end.ouroboros" } },
+              "patterns": [
+                { "include": "#comments" },
+                { "include": "#type-annotations" },
+                {
+                  "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+                  "name": "variable.parameter.function.ouroboros"
+                },
+                {
+                  "match": ",",
+                  "name": "punctuation.separator.parameter.ouroboros"
+                }
+              ]
+            },
+            { // Optional return type annotation after parameters like: func(a: int): string {
+              "match": "(?<=[:)])\\s*(:\\s*)((?:void | \\b(?:int|float|string|bool|array|object|map|Vector[234]) | [A-Z_][A-Za-z0-9_]* (?: \\s*<[^>]+> )? ) ( \\s*\\[\\] )?)(?=\\s*\\{)",
+              "captures": {
+                "1": { "name": "punctuation.separator.return-type.ouroboros" },
+                "2": { "name": "storage.type.function.return.ouroboros" }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "meta.function-call.ouroboros",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*<[^>]+>)?\\s*(\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.call.ouroboros" },
+            "2": { "name": "punctuation.definition.arguments.begin.ouroboros" }
+            // Arguments themselves are expressions, parsed by main patterns
+          }
+        },
+        {
+          "name": "support.function.builtin.ouroboros",
+          "match": "\\b(print|to_string|string_length|string_concat|sqrt|abs|max|min|assert|log|warn|error|opengl_[a-z_]+|vulkan_[a-z_]+|voxel_[a-z_]+|ml_[a-z_]+|init_gui|draw_window|draw_label|draw_button|gui_message_loop|connect_to_server|http_get|register_event|trigger_event|set_timeout)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.ouroboros",
+          "match": "\\b0x[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[LN]?\\b"
+        },
+        {
+          "name": "constant.numeric.float.ouroboros",
+          "match": "\\b(?:\\d+(?:_\\d+)*\\.\\d*(?:_\\d*)*(?:[eE][+-]?\\d+)?|\\d+(?:_\\d+)*[eE][+-]?\\d+|\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+)?)[FD]?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.ouroboros",
+          "match": "\\b\\d+(?:_\\d+)*[LN]?\\b"
+        }
+      ]
+    },
     "operators": {
       "patterns": [
+        {
+          "name": "keyword.operator.arrow.ouroboros",
+          "match": "=>|->"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.ouroboros",
+          "match": "\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>="
+        },
         {
           "name": "keyword.operator.assignment.ouroboros",
           "match": "="
         },
         {
-          "name": "keyword.operator.arithmetic.ouroboros",
-          "match": "\\+|\\-|\\*|\\/|\\%"
+          "name": "keyword.operator.comparison.ouroboros",
+          "match": "==|!=|===|!==|<=|>=|<|>"
         },
         {
           "name": "keyword.operator.logical.ouroboros",
-          "match": "\\!|\\&\\&|\\|\\|"
+          "match": "&&|\\|\\||!"
         },
         {
-          "name": "keyword.operator.comparison.ouroboros",
-          "match": "==|!=|>|<|>=|<="
+          "name": "keyword.operator.bitwise.ouroboros",
+          "match": "&(?!&)|\\|(?!\\|)|\\^|~|<<|>>"
         },
         {
-          "name": "keyword.operator.member.ouroboros",
+          "name": "keyword.operator.arithmetic.ouroboros",
+          "match": "\\+\\+|--|\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.ternary.ouroboros",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.spread.ouroboros",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.scope-resolution.ouroboros",
+          "match": "::"
+        }
+        // Member access dot '.' is handled in "member-access"
+      ]
+    },
+    "member-access": {
+      "patterns": [
+        {
+          "name": "punctuation.accessor.dot.ouroboros",
           "match": "\\."
+        },
+        { // Property after dot
+          "match": "(?<=\\.)\\s*([a-zA-Z_][a-zA-Z0-9_]*)(?!\\s*\\()",
+          "name": "variable.other.property.ouroboros"
+        }
+        // Method calls after dot are handled by function-calls combined with dot
+      ]
+    },
+    "variables-and-parameters": {
+      "patterns": [
+        {
+          "comment": "Variable/parameter in a typed declaration: type varName",
+          "match": "(?<=(?:\\b(?:int|float|string|bool|array|object|map|Vector[234]|[A-Z_][A-Za-z0-9_]*)(?:\\s*<[^>]+>)?(?:\\s*\\[\\])?)\\s+)([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "name": "variable.declaration.ouroboros"
+        },
+        {
+          "comment": "Variable/parameter in a 'let' or 'var' declaration",
+          "match": "(?<=\\b(?:let|var|const)\\s+)([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "name": "variable.declaration.ouroboros"
+        },
+        {
+          "comment": "this.member",
+          "match": "\\b(this)\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "variable.language.this.ouroboros" },
+            "2": { "name": "variable.other.member.ouroboros" }
+          }
+        },
+        {
+          "name": "variable.parameter.ouroboros",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*:)"
+        },
+        {
+          "name": "variable.other.ouroboros",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b"
         }
       ]
     },
-    "variables": {
+    "punctuation": {
       "patterns": [
         {
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=:)",
-          "name": "variable.parameter.ouroboros"
+          "name": "punctuation.terminator.statement.ouroboros",
+          "match": ";"
         },
         {
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b",
-          "name": "variable.other.ouroboros"
+          "name": "punctuation.separator.comma.ouroboros",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.colon.ouroboros",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.section.curly.begin.ouroboros",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.curly.end.ouroboros",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.round.begin.ouroboros",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.round.end.ouroboros",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.section.square.begin.ouroboros",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.square.end.ouroboros",
+          "match": "\\]"
         }
       ]
     }
   }
-} 
+}

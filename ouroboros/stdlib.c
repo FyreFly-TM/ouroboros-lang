@@ -395,22 +395,28 @@ void register_stdlib_functions() {
     printf("[STD] Built-in functions registered.\n");
 }
 
-int call_builtin_function(const char *name, const char **args, int arg_count) {
-    printf("[STDLIB] Looking for built-in function: %s with %d args\n", name, arg_count);
+int call_builtin_function_impl(const char *name, const char **args, int arg_count) {
+    // printf("[STDLIB_IMPL] Looking for built-in function: %s with %d args\n", name, arg_count);
     
-    NativeFunction *fn = functions;
+    NativeFunction *fn = functions; // Assuming 'functions' is the list of registered native functions
     while (fn) {
-        printf("[STDLIB] Checking function: %s\n", fn->name);
+        // printf("[STDLIB_IMPL] Checking function: %s (expects %d args)\n", fn->name, fn->arg_count);
         if (strcmp(fn->name, name) == 0) {
-            printf("[STDLIB] Found built-in function: %s\n", name);
-            set_call_args(args, arg_count);
-            fn->func_ptr();
+            // Basic arity check (can be made more sophisticated)
+            // if (fn->arg_count != arg_count && fn->arg_count != -1) { // -1 for varargs
+            //     fprintf(stderr, "[STDLIB_IMPL] Error: Function '%s' called with %d args, but expects %d.\n", name, arg_count, fn->arg_count);
+            //     // set_return_value("undefined"); // Or some error indicator
+            //     return 0; // Indicate error or wrong function
+            // }
+            // printf("[STDLIB_IMPL] Found built-in function: %s\n", name);
+            set_call_args(args, arg_count); // Set args for the wrapper to use
+            fn->func_ptr(); // Call the C wrapper
             return 1; // Success
         }
         fn = fn->next;
     }
     
-    printf("[STDLIB] Built-in function not found: %s\n", name);
+    // printf("[STDLIB_IMPL] Built-in function not found: %s\n", name);
     return 0; // Function not found
 }
 

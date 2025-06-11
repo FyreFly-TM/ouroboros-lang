@@ -37,10 +37,7 @@ static int token_pos;
 static int num_tokens;
 static Token current_token;
 
-// Global pointer to the root AST so that other translation units (vm.c, eval.c)
-// can inspect the parsed program.  This gets assigned each time `parse()` is
-// called.
-ASTNode *program = NULL;
+ASTNode* program = NULL;
 
 // --- Helpers ---
 static void advance() {
@@ -53,7 +50,7 @@ static Token peek_token() {
     if (token_pos < num_tokens) {
         return tokens[token_pos];
     }
-    Token eof_token = { .type = TOKEN_EOF, .text = "" };
+    Token eof_token = { .type = TOKEN_EOF, .text = "", .line = current_token.line, .col = current_token.col };
     return eof_token;
 }
 
@@ -61,23 +58,32 @@ static Token peek_token_n(int n) {
     if (token_pos + n - 1 < num_tokens) {
         return tokens[token_pos + n - 1];
     }
-    Token eof_token = { .type = TOKEN_EOF, .text = "" };
+    Token eof_token = { .type = TOKEN_EOF, .text = "", .line = current_token.line, .col = current_token.col };
     return eof_token;
 }
 
-static int is_type_keyword(const char* s) {
+// Utility to check if a string is a built-in type keyword
+int is_builtin_type_keyword(const char* s) { // Renamed to avoid conflict if parser.c included elsewhere
     return strcmp(s, "int") == 0 || strcmp(s, "float") == 0 ||
-           strcmp(s, "bool") == 0 || strcmp(s, "string") == 0 ||
-           strcmp(s, "void") == 0;
+        strcmp(s, "bool") == 0 || strcmp(s, "string") == 0 ||
+        strcmp(s, "void") == 0 || strcmp(s, "array") == 0 || // "array" might be a type
+        strcmp(s, "object") == 0 || strcmp(s, "any") == 0; // More generic types
 }
 
+
 static int get_precedence(const char* op) {
-    if (strcmp(op, "=") == 0) return 1;
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 2;
-    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 || strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 3;
-    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 4;
-    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 5;
-    return 0; // Not a binary operator
+    if (strcmp(op, "=") == 0) return 1; // Assignment (right-associative, usually handled specially)
+    if (strcmp(op, "||") == 0) return 2;
+    if (strcmp(op, "&&") == 0) return 3;
+    // Bitwise ops could go here if added
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 7;
+    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 || strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 8;
+    // Bitwise shifts
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 10; // Additive
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0 || strcmp(op, "%") == 0) return 11; // Multiplicative
+    // Unary operators are handled by parse_primary or a dedicated unary parse function
+    // Member access (.), array index ([]), function call (()) are usually highest or handled by parse_primary loop
+    return 0;
 }
 
 
@@ -93,36 +99,36 @@ ASTNode* parse(Token* token_array) {
 
     advance();
 
-    ASTNode* program_node = create_node(AST_PROGRAM, "program");
+    program = create_node(AST_PROGRAM, "program", 1, 1);
     ASTNode* last_stmt = NULL;
 
-    printf("\n==== Parsing ====\n");
+    // printf("\n==== Parsing ====\n");
     while (current_token.type != TOKEN_EOF) {
         ASTNode* stmt = parse_statement();
         if (stmt) {
             if (last_stmt == NULL) {
-                program_node->left = stmt;
+                program->left = stmt;
                 last_stmt = stmt;
-            } else {
+            }
+            else {
                 last_stmt->next = stmt;
                 last_stmt = stmt;
             }
-        } else {
-            fprintf(stderr, "Error: Failed to parse statement at line %d, col %d. Skipping token: '%s'\n", 
-                    current_token.line, current_token.col, current_token.text);
-            advance();
+        }
+        else {
+            fprintf(stderr, "Error: Failed to parse statement at line %d, col %d. Current token: '%s' (Type %d). Skipping.\n",
+                current_token.line, current_token.col, current_token.text, current_token.type);
+            if (current_token.type != TOKEN_EOF) advance(); else break;
         }
     }
-
-    // Expose the constructed AST to the rest of the VM
-    program = program_node;
-    return program_node;
+    return program;
 }
 
 // --- Statement Parsers ---
 
 static ASTNode* parse_statement() {
-    // Handle keywords that start statements
+    Token start_token = current_token;
+
     if (current_token.type == TOKEN_KEYWORD) {
         if (strcmp(current_token.text, "let") == 0 || strcmp(current_token.text, "var") == 0) return parse_variable_declaration();
         if (strcmp(current_token.text, "if") == 0) return parse_if_statement();
@@ -134,74 +140,54 @@ static ASTNode* parse_statement() {
         if (strcmp(current_token.text, "class") == 0) return parse_class_declaration();
         if (strcmp(current_token.text, "struct") == 0) return parse_struct_declaration();
         if (strcmp(current_token.text, "import") == 0) return parse_import();
-        // Handle access modifiers
-        if (strcmp(current_token.text, "public") == 0 || 
-            strcmp(current_token.text, "private") == 0 || 
+
+        if (strcmp(current_token.text, "public") == 0 ||
+            strcmp(current_token.text, "private") == 0 ||
             strcmp(current_token.text, "static") == 0) {
-            
-            // Save the modifier
+
             char modifier[16];
             strncpy(modifier, current_token.text, sizeof(modifier) - 1);
             modifier[sizeof(modifier) - 1] = '\0';
-            
-            advance(); // consume the modifier
-            
-            // Check if it's a function
+            Token modifier_token = current_token;
+            advance();
+
+            ASTNode* modified_node = NULL;
             if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "function") == 0) {
-                ASTNode* func = parse_function();
-                if (func) {
-                    strncpy(func->access_modifier, modifier, sizeof(func->access_modifier) - 1);
-                    func->access_modifier[sizeof(func->access_modifier) - 1] = '\0';
-                }
-                return func;
+                modified_node = parse_function();
             }
-            
-            // Check if it's a member access (for properties)
-            if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "this") == 0) {
-                ASTNode* expr = parse_expression();
-                if (expr && current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0) {
-                    advance(); // consume ';'
-                    
-                    // For binary operation (assignments)
-                    if (expr->type == AST_BINARY_OP && strcmp(expr->value, "=") == 0) {
-                        if (expr->left && expr->left->type == AST_MEMBER_ACCESS) {
-                            strncpy(expr->left->access_modifier, modifier, sizeof(expr->left->access_modifier) - 1);
-                            expr->left->access_modifier[sizeof(expr->left->access_modifier) - 1] = '\0';
-                        }
-                    }
-                    
-                    return expr;
+            else if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "class") == 0) {
+                modified_node = parse_class_declaration();
+            }
+            else if (is_builtin_type_keyword(current_token.text) || current_token.type == TOKEN_IDENTIFIER) {
+                Token peek = peek_token();
+                Token peek2 = peek_token_n(2);
+                if ((is_builtin_type_keyword(current_token.text) || current_token.type == TOKEN_IDENTIFIER) &&
+                    peek.type == TOKEN_IDENTIFIER &&
+                    peek2.type == TOKEN_SYMBOL && strcmp(peek2.text, "(") == 0) {
+                    modified_node = parse_typed_function();
                 }
-                
-                fprintf(stderr, "Error: Expected ';' after property declaration with access modifier\n");
+                else {
+                    modified_node = parse_typed_variable_declaration();
+                }
+            }
+            else if (current_token.type == TOKEN_KEYWORD && (strcmp(current_token.text, "var") == 0 || strcmp(current_token.text, "let") == 0)) {
+                modified_node = parse_variable_declaration();
+            }
+            else {
+                fprintf(stderr, "Error (L%d:%d): Expected function, class, or variable declaration after access modifier '%s'. Got '%s'.\n",
+                    modifier_token.line, modifier_token.col, modifier_token.text, current_token.text);
                 return NULL;
             }
-            
-            // Check if it's a class declaration with an access modifier
-            if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "class") == 0) {
-                ASTNode *cls = parse_class_declaration();
-                if (cls) {
-                    strncpy(cls->access_modifier, modifier, sizeof(cls->access_modifier) - 1);
-                    cls->access_modifier[sizeof(cls->access_modifier) - 1] = '\0';
-                }
-                return cls;
+
+            if (modified_node) {
+                strncpy(modified_node->access_modifier, modifier, sizeof(modified_node->access_modifier) - 1);
+                modified_node->access_modifier[sizeof(modified_node->access_modifier) - 1] = '\0';
+                modified_node->line = modifier_token.line;
+                modified_node->col = modifier_token.col;
             }
-            
-            // Check for a typed variable declaration after the modifier, e.g.
-            //   "public float myVar = 1.0;"  or  "private MyClass ref;"
-            if (is_type_keyword(current_token.text) || current_token.type == TOKEN_IDENTIFIER) {
-                ASTNode *var_decl = parse_typed_variable_declaration();
-                if (var_decl) {
-                    strncpy(var_decl->access_modifier, modifier, sizeof(var_decl->access_modifier) - 1);
-                    var_decl->access_modifier[sizeof(var_decl->access_modifier) - 1] = '\0';
-                }
-                return var_decl;
-            }
-            
-            fprintf(stderr, "Error: Expected function or property after access modifier\n");
-            return NULL;
+            return modified_node;
         }
-        if (is_type_keyword(current_token.text)) {
+        if (is_builtin_type_keyword(current_token.text)) { // Check for `int foo()` or `float bar;`
             Token peek = peek_token();
             if (peek.type == TOKEN_IDENTIFIER) {
                 Token peek2 = peek_token_n(2);
@@ -213,31 +199,33 @@ static ASTNode* parse_statement() {
         }
     }
 
-    // Handle user-defined types (simplified)
-    if (current_token.type == TOKEN_IDENTIFIER) {
-         Token peek = peek_token();
-         if (peek.type == TOKEN_IDENTIFIER) {
-            // Could be: `MyType myVar;`
-            return parse_typed_variable_declaration();
-         }
+    if (current_token.type == TOKEN_IDENTIFIER) { // Could be `MyType myVar;` or `myFunc();` or `myVar = ...;`
+        Token peek = peek_token();
+        if (peek.type == TOKEN_IDENTIFIER) {
+            Token peek2 = peek_token_n(2);
+            if (peek2.type == TOKEN_SYMBOL && strcmp(peek2.text, "(") == 0) {
+                return parse_typed_function(); // MyType myFunc(...
+            }
+            return parse_typed_variable_declaration(); // MyType myVar;
+        }
     }
-    
-    // Default to expression statement
+
     ASTNode* expr = parse_expression();
     if (!expr) return NULL;
-    
+
     if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0) {
-        advance(); // consume ';'
+        advance();
         return expr;
     }
-    
-    fprintf(stderr, "Error: Expected ';' after expression at line %d, col %d\n", 
-            current_token.line, current_token.col);
+
+    fprintf(stderr, "Error (L%d:%d): Expected ';' after expression statement. Got token '%s' (type %d) after expression starting L%d:%d.\n",
+        current_token.line, current_token.col, current_token.text, current_token.type, expr->line, expr->col);
     return NULL;
 }
 
 static ASTNode* parse_block() {
-    ASTNode* block = create_node(AST_BLOCK, "block");
+    Token start_token = current_token;
+    ASTNode* block = create_node(AST_BLOCK, "block", start_token.line, start_token.col);
     ASTNode* last_stmt = NULL;
 
     while (current_token.type != TOKEN_EOF && !(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "}") == 0)) {
@@ -246,14 +234,16 @@ static ASTNode* parse_block() {
             if (last_stmt == NULL) {
                 block->left = stmt;
                 last_stmt = stmt;
-            } else {
+            }
+            else {
                 last_stmt->next = stmt;
                 last_stmt = stmt;
             }
-        } else {
-             fprintf(stderr, "Error in block: Failed to parse statement at line %d, col %d. Skipping token: '%s'\n",
-                    current_token.line, current_token.col, current_token.text);
-            advance();
+        }
+        else {
+            fprintf(stderr, "Error in block (L%d:%d): Failed to parse statement. Skipping token: '%s'\n",
+                current_token.line, current_token.col, current_token.text);
+            if (current_token.type != TOKEN_EOF) advance(); else break;
         }
     }
     return block;
@@ -261,106 +251,115 @@ static ASTNode* parse_block() {
 
 
 static ASTNode* parse_typed_variable_declaration() {
-    // Type
-    if (!is_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected type name for variable declaration.\n");
+    Token type_token = current_token;
+
+    if (!is_builtin_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
+        fprintf(stderr, "Error (L%d:%d): Expected type name for variable declaration.\n", current_token.line, current_token.col);
         return NULL;
     }
     char* type_str = strdup(current_token.text);
     advance();
 
-    // Name
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected identifier after type in variable declaration\n");
+        fprintf(stderr, "Error (L%d:%d): Expected identifier after type '%s'\n", current_token.line, current_token.col, type_token.text);
         free(type_str);
         return NULL;
     }
-    char var_name[50];
-    strcpy(var_name, current_token.text);
+    char var_name_str[sizeof(((ASTNode*)0)->value)]; // Ensure buffer is same size as ASTNode.value
+    strncpy(var_name_str, current_token.text, sizeof(var_name_str) - 1);
+    var_name_str[sizeof(var_name_str) - 1] = '\0';
     advance();
 
     int is_array_decl = 0;
-    /* Optional [] for array declaration */
     if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "[") == 0) {
-        advance(); /* consume '[' */
+        advance();
         if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "]") != 0) {
-            fprintf(stderr, "Error: Expected ']' after '[' in array declaration.\n");
+            fprintf(stderr, "Error (L%d:%d): Expected ']' after '[' in array declaration.\n", current_token.line, current_token.col);
             free(type_str);
             return NULL;
         }
-        advance(); /* consume ']' */
+        advance();
         is_array_decl = 1;
     }
 
-    ASTNode* var_decl = create_node(AST_VAR_DECL, var_name);
+    ASTNode* var_decl = create_node(AST_TYPED_VAR_DECL, var_name_str, type_token.line, type_token.col);
     strncpy(var_decl->data_type, type_str, sizeof(var_decl->data_type) - 1);
     var_decl->data_type[sizeof(var_decl->data_type) - 1] = '\0';
+    if (is_array_decl) strcat(var_decl->data_type, "[]"); // Append [] to type name string
     var_decl->is_array = is_array_decl;
     free(type_str);
 
-    // Optional initialization ( '=' may be tokenised as SYMBOL or OPERATOR )
+    var_decl->left = NULL;
     if ((current_token.type == TOKEN_SYMBOL || current_token.type == TOKEN_OPERATOR) && strcmp(current_token.text, "=") == 0) {
         advance();
-        var_decl->left = parse_expression();
-        if (!var_decl->left) {
-            fprintf(stderr, "Error: Expected expression after '='\n");
+        var_decl->right = parse_expression();
+        if (!var_decl->right) {
+            fprintf(stderr, "Error (L%d:%d): Expected expression after '='\n", current_token.line, current_token.col);
             free_ast(var_decl);
             return NULL;
         }
     }
+    else {
+        var_decl->right = NULL;
+    }
 
-    // Semicolon
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
-        fprintf(stderr, "Error: Expected ';' after variable declaration\n");
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after variable declaration of '%s'\n", current_token.line, current_token.col, var_name_str);
         free_ast(var_decl);
         return NULL;
     }
     advance();
     return var_decl;
 }
+// ... (rest of parser.c, ensure all create_node calls have line/col) ...
 
+// The rest of parser.c (parse_typed_function, parse_parameters, etc.) would be here.
+// I'll continue with the rest of the file, assuming the create_node updates are applied.
 
 static ASTNode* parse_typed_function() {
-    // Return Type
-    if (!is_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
-         fprintf(stderr, "Error: Expected return type for function.\n");
+    Token type_token = current_token;
+    if (!is_builtin_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
+        fprintf(stderr, "Error (L%d:%d): Expected return type for function.\n", current_token.line, current_token.col);
         return NULL;
     }
     char* type_str = strdup(current_token.text);
     advance();
 
-    // Name
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected function name after type\n");
+        fprintf(stderr, "Error (L%d:%d): Expected function name after type '%s'\n", current_token.line, current_token.col, type_token.text);
         free(type_str);
         return NULL;
     }
-    ASTNode* func = create_node(AST_TYPED_FUNCTION, current_token.text);
+    ASTNode* func = create_node(AST_TYPED_FUNCTION, current_token.text, type_token.line, type_token.col);
     strncpy(func->data_type, type_str, sizeof(func->data_type) - 1);
     func->data_type[sizeof(func->data_type) - 1] = '\0';
     free(type_str);
     advance();
 
-    // Parameters
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
-        fprintf(stderr, "Error: Expected '(' after function name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after function name '%s'\n", current_token.line, current_token.col, func->value);
         free_ast(func);
         return NULL;
     }
     advance();
     func->left = parse_parameters();
 
-    // Body
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
-        fprintf(stderr, "Error: Expected '{' to open function body\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '{' to open function body for '%s'\n", current_token.line, current_token.col, func->value);
         free_ast(func);
         return NULL;
     }
+    Token body_start_token = current_token;
     advance();
     func->right = parse_block();
-    
+    if (!func->right) {
+        fprintf(stderr, "Error (L%d:%d): Failed to parse function body for '%s'\n", body_start_token.line, body_start_token.col, func->value);
+        free_ast(func);
+        return NULL;
+    }
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
-        fprintf(stderr, "Error: Expected '}' to close function body\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close function body for '%s'. Got '%s'.\n", current_token.line, current_token.col, func->value, current_token.text);
         free_ast(func);
         return NULL;
     }
@@ -376,35 +375,50 @@ static ASTNode* parse_parameters() {
 
     if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
         advance();
-        return NULL; // No parameters
+        return NULL;
     }
 
     while (current_token.type != TOKEN_EOF) {
-        // Type
-        if (!is_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
-             fprintf(stderr, "Error: Expected parameter type\n");
-             free_ast(head);
-             return NULL;
-        }
-        char* param_type = strdup(current_token.text);
-        advance();
-
-        // Name
-        if (current_token.type != TOKEN_IDENTIFIER) {
-            fprintf(stderr, "Error: Expected parameter name\n");
-            free(param_type);
+        Token param_type_token = current_token;
+        if (!is_builtin_type_keyword(current_token.text) && current_token.type != TOKEN_IDENTIFIER) {
+            fprintf(stderr, "Error (L%d:%d): Expected parameter type\n", current_token.line, current_token.col);
             free_ast(head);
             return NULL;
         }
-        ASTNode* param_node = create_node(AST_PARAMETER, current_token.text);
-        strncpy(param_node->data_type, param_type, sizeof(param_node->data_type) - 1);
-        param_node->data_type[sizeof(param_node->data_type) - 1] = '\0';
-        free(param_type);
+        char* param_type_str = strdup(current_token.text);
         advance();
+
+        if (current_token.type != TOKEN_IDENTIFIER) {
+            fprintf(stderr, "Error (L%d:%d): Expected parameter name after type '%s'\n", current_token.line, current_token.col, param_type_str);
+            free(param_type_str);
+            free_ast(head);
+            return NULL;
+        }
+        ASTNode* param_node = create_node(AST_PARAMETER, current_token.text, param_type_token.line, param_type_token.col);
+        strncpy(param_node->data_type, param_type_str, sizeof(param_node->data_type) - 1);
+        param_node->data_type[sizeof(param_node->data_type) - 1] = '\0';
+        free(param_type_str);
+        advance();
+
+        // Check for array parameter type like: type name[]
+        if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "[") == 0) {
+            advance();
+            if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "]") == 0) {
+                advance();
+                param_node->is_array = 1;
+                strcat(param_node->data_type, "[]");
+            }
+            else {
+                fprintf(stderr, "Error (L%d:%d): Expected ']' for array parameter '%s'.\n", current_token.line, current_token.col, param_node->value);
+                free_ast(param_node); free_ast(head); return NULL;
+            }
+        }
+
 
         if (head == NULL) {
             head = tail = param_node;
-        } else {
+        }
+        else {
             tail->next = param_node;
             tail = param_node;
         }
@@ -414,7 +428,7 @@ static ASTNode* parse_parameters() {
         }
 
         if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
-            fprintf(stderr, "Error: Expected ',' or ')' in parameter list\n");
+            fprintf(stderr, "Error (L%d:%d): Expected ',' or ')' in parameter list\n", current_token.line, current_token.col);
             free_ast(head);
             return NULL;
         }
@@ -423,8 +437,9 @@ static ASTNode* parse_parameters() {
 
     if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
         advance();
-    } else {
-        fprintf(stderr, "Error: Expected ')' to close parameter list\n");
+    }
+    else {
+        fprintf(stderr, "Error (L%d:%d): Expected ')' to close parameter list.\n", current_token.line, current_token.col);
         free_ast(head);
         return NULL;
     }
@@ -433,16 +448,17 @@ static ASTNode* parse_parameters() {
 
 
 static ASTNode* parse_struct_declaration() {
-    advance(); // consume 'struct'
+    Token struct_keyword_token = current_token;
+    advance();
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected struct name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected struct name\n", current_token.line, current_token.col);
         return NULL;
     }
-    ASTNode* node = create_node(AST_STRUCT, current_token.text);
+    ASTNode* node = create_node(AST_STRUCT, current_token.text, struct_keyword_token.line, struct_keyword_token.col);
     advance();
 
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
-        fprintf(stderr, "Error: Expected '{' after struct name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '{' after struct name '%s'\n", current_token.line, current_token.col, node->value);
         free_ast(node);
         return NULL;
     }
@@ -455,21 +471,23 @@ static ASTNode* parse_struct_declaration() {
         if (member) {
             if (members == NULL) {
                 members = last_member = member;
-            } else {
+            }
+            else {
                 last_member->next = member;
                 last_member = member;
             }
-        } else {
-             fprintf(stderr, "Error: Failed to parse struct member.\n");
-             free_ast(node);
-             free_ast(members);
-             return NULL;
+        }
+        else {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse struct member in '%s'.\n", current_token.line, current_token.col, node->value);
+            free_ast(node);
+            free_ast(members);
+            return NULL;
         }
     }
     node->left = members;
 
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
-        fprintf(stderr, "Error: Expected '}' to close struct definition.\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close struct definition '%s'.\n", current_token.line, current_token.col, node->value);
         free_ast(node);
         return NULL;
     }
@@ -479,16 +497,29 @@ static ASTNode* parse_struct_declaration() {
 
 
 static ASTNode* parse_class_declaration() {
-    advance(); // consume 'class'
+    Token class_keyword_token = current_token;
+    advance();
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected class name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected class name\n", current_token.line, current_token.col);
         return NULL;
     }
-    ASTNode* node = create_node(AST_CLASS, current_token.text);
+    ASTNode* node = create_node(AST_CLASS, current_token.text, class_keyword_token.line, class_keyword_token.col);
     advance();
 
+    if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "extends") == 0) {
+        advance();
+        if (current_token.type != TOKEN_IDENTIFIER) {
+            fprintf(stderr, "Error (L%d:%d): Expected base class name after 'extends' for class '%s'.\n", current_token.line, current_token.col, node->value);
+            free_ast(node);
+            return NULL;
+        }
+        node->right = create_node(AST_IDENTIFIER, current_token.text, current_token.line, current_token.col);
+        advance();
+    }
+
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
-        fprintf(stderr, "Error: Expected '{' after class name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '{' after class name or inheritance specifier for '%s'\n", current_token.line, current_token.col, node->value);
         free_ast(node);
         return NULL;
     }
@@ -497,40 +528,27 @@ static ASTNode* parse_class_declaration() {
     ASTNode* members = NULL;
     ASTNode* last_member = NULL;
     while (current_token.type != TOKEN_EOF && !(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "}") == 0)) {
-        // Check for access modifiers before parsing the member
-        char access_modifier[16] = {0};
-        if (current_token.type == TOKEN_KEYWORD) {
-            if (strcmp(current_token.text, "public") == 0 || 
-                strcmp(current_token.text, "private") == 0 || 
-                strcmp(current_token.text, "static") == 0) {
-                
-                strncpy(access_modifier, current_token.text, sizeof(access_modifier) - 1);
-                advance(); // consume the access modifier
-            }
-        }
-        
-        ASTNode* member = parse_statement(); // can be var or func
-        if(member) {
-            // Set the access modifier if one was specified
-            if (access_modifier[0] != '\0') {
-                strncpy(member->access_modifier, access_modifier, sizeof(member->access_modifier) - 1);
-            }
-            
+        Token member_start_token = current_token;
+        ASTNode* member = parse_statement();
+
+        if (member) {
             if (members == NULL) {
                 members = last_member = member;
-            } else {
+            }
+            else {
                 last_member->next = member;
                 last_member = member;
             }
-        } else {
-            fprintf(stderr, "Error: Failed to parse field or method in class body\n");
-            advance(); // Skip bad token
+        }
+        else {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse field or method in class '%s'.\n", member_start_token.line, member_start_token.col, node->value);
+            if (current_token.type != TOKEN_EOF) advance(); else break;
         }
     }
     node->left = members;
 
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
-        fprintf(stderr, "Error: Expected '}' to close class definition.\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close class definition '%s'.\n", current_token.line, current_token.col, node->value);
         free_ast(node);
         return NULL;
     }
@@ -541,50 +559,75 @@ static ASTNode* parse_class_declaration() {
 // --- Expression Parsers ---
 
 static ASTNode* parse_expression() {
-    ASTNode* left = parse_primary();
+    ASTNode* left = parse_primary(); // This handles unary prefix operators as part of primary
     if (!left) {
+        // parse_primary would have reported an error if it failed to parse anything meaningful
+        // No need to check for unary here again if parse_primary covers it.
+        // If parse_primary returns NULL, it's a genuine parsing error for an expression.
         return NULL;
     }
-
-    // First, consume any binary operators with the usual precedence rules.
-    left = parse_binary_expression(left, 0);
-
-    // After the binary expression has been built, there may still be a trailing
-    // member-access chain (e.g. the expression "(a * b).x").  Run the member-access
-    // parser once more so that the '.' operator binds tighter than any binary
-    // arithmetic operators.
-    return parse_member_access(left);
+    return parse_binary_expression(left, 0);
 }
 
 static ASTNode* parse_binary_expression(ASTNode* left, int min_precedence) {
     while (1) {
-        if (current_token.type != TOKEN_OPERATOR && current_token.type != TOKEN_SYMBOL) {
-            break;
+        Token op_token = current_token; // Save for potential operator
+        int prec = 0;
+        // Check if current token is a potential binary operator
+        if (current_token.type == TOKEN_OPERATOR ||
+            (current_token.type == TOKEN_SYMBOL && (strcmp(current_token.text, "=") == 0 ||
+                strcmp(current_token.text, "<") == 0 ||
+                strcmp(current_token.text, ">") == 0)
+                )) {
+            prec = get_precedence(current_token.text);
         }
-        int prec = get_precedence(current_token.text);
+        else {
+            break; // Not a binary operator we handle here
+        }
+
         if (prec <= min_precedence) {
             break;
         }
-        
-        char op[10];
-        strcpy(op, current_token.text);
-        advance();
 
-        ASTNode* right = parse_primary();
-        if (!right) {
-            fprintf(stderr, "Error: Expected primary expression for right-hand side of '%s'\n", op);
+        advance(); // Consume the operator
+
+        ASTNode* right = parse_primary(); // Parse RHS primary
+        if (!right) { // Higher precedence ops bind tighter
+            // If parse_primary fails, it's an error on RHS
+            fprintf(stderr, "Error (L%d:%d): Expected expression for right-hand side of binary operator '%s'\n", op_token.line, op_token.col, op_token.text);
             free_ast(left);
             return NULL;
         }
 
+        // Handle right-associativity or higher precedence on the right
         while (1) {
-            if (current_token.type != TOKEN_OPERATOR && current_token.type != TOKEN_SYMBOL) break;
-            int next_prec = get_precedence(current_token.text);
-            if (next_prec <= prec) break;
-            right = parse_binary_expression(right, next_prec);
+            Token next_op_token = current_token;
+            int next_prec = 0;
+            if (next_op_token.type == TOKEN_OPERATOR ||
+                (next_op_token.type == TOKEN_SYMBOL && (strcmp(next_op_token.text, "=") == 0 ||
+                    strcmp(next_op_token.text, "<") == 0 ||
+                    strcmp(next_op_token.text, ">") == 0))) {
+                next_prec = get_precedence(next_op_token.text);
+            }
+            else {
+                break;
+            }
+
+            // For left-associative: if next_prec <= prec, break.
+            // For right-associative (like '='): if next_prec < prec, break. (or handle with prec-1 for recursive call)
+            if (strcmp(op_token.text, "=") == 0) { // Assignment is right-associative
+                if (next_prec < prec) break; // For right-associative: recurse if same or higher precedence
+                right = parse_binary_expression(right, prec - 1); // Pass (prec - 1) for right-associativity
+            }
+            else { // Left-associative
+                if (next_prec <= prec) break;
+                right = parse_binary_expression(right, next_prec);
+            }
+
+            if (!right) { free_ast(left); return NULL; }
         }
 
-        ASTNode* new_left = create_node(AST_BINARY_OP, op);
+        ASTNode* new_left = create_node(AST_BINARY_OP, op_token.text, op_token.line, op_token.col);
         new_left->left = left;
         new_left->right = right;
         left = new_left;
@@ -595,547 +638,736 @@ static ASTNode* parse_binary_expression(ASTNode* left, int min_precedence) {
 
 static ASTNode* parse_primary() {
     ASTNode* node = NULL;
-    if (current_token.type == TOKEN_KEYWORD &&
-        (strcmp(current_token.text, "true") == 0 || strcmp(current_token.text, "false") == 0)) {
-        /* Boolean literal */
-        node = create_node(AST_LITERAL, current_token.text);
+    Token start_token = current_token;
+
+    // Handle unary prefix operators
+    if (current_token.type == TOKEN_OPERATOR &&
+        (strcmp(current_token.text, "-") == 0 || strcmp(current_token.text, "+") == 0 || strcmp(current_token.text, "!") == 0)) {
+        Token op_token = current_token;
         advance();
-    } else if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "this") == 0) {
+        // The operand of a unary operator should be parsed with a precedence higher than most binary operators.
+        // parse_primary() itself or a specific parse_unary_operand() that handles high precedence (like member access) is needed.
+        ASTNode* operand = parse_primary(); // Recursive call for chained unary or high-precedence constructs
+        if (!operand) {
+            fprintf(stderr, "Error (L%d:%d): Expected operand after unary operator '%s'.\n", op_token.line, op_token.col, op_token.text);
+            return NULL;
+        }
+        node = create_node(AST_UNARY_OP, op_token.text, op_token.line, op_token.col);
+        node->left = operand;
+        // After parsing a unary expression, it can be the start of member access, etc.
+        // So, fall through to the postfix operator loop.
+    }
+    else if (current_token.type == TOKEN_KEYWORD &&
+        (strcmp(current_token.text, "true") == 0 || strcmp(current_token.text, "false") == 0)) {
+        node = create_node(AST_LITERAL, current_token.text, start_token.line, start_token.col);
+        strncpy(node->data_type, "bool", sizeof(node->data_type) - 1);
+        node->data_type[sizeof(node->data_type) - 1] = '\0';
+        advance();
+    }
+    else if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "this") == 0) {
         node = parse_this_reference();
-    } else if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "new") == 0) {
+    }
+    else if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "new") == 0) {
         node = parse_new_expression();
-    } else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
-        advance(); // consume '('
+    }
+    else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
+        advance();
         node = parse_expression();
+        if (!node) { return NULL; }
         if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-            fprintf(stderr, "Error: Expected ')'\n");
-            free_ast(node);
-            return NULL;
+            fprintf(stderr, "Error (L%d:%d): Expected ')' after parenthesized expression.\n", start_token.line, start_token.col);
+            free_ast(node); return NULL;
         }
-        advance(); // consume ')'
-    } else if (current_token.type == TOKEN_SYMBOL && (strcmp(current_token.text, "[") == 0 || strcmp(current_token.text, "{") == 0)) {
+        advance();
+    }
+    else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "[") == 0) {
         node = parse_array_literal();
-    } else {
-        node = parse_literal_or_identifier();
+    }
+    else {
+        node = parse_literal_or_identifier(); // Handles numbers, strings, identifiers
     }
 
-    // Support plain function calls like "foo(a, b)" where 'foo' is an identifier
-    if (node && node->type == AST_IDENTIFIER && current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
-        advance(); // consume '('
-
-        // Parse argument list
-        ASTNode *args = NULL;
-        ASTNode *last_arg = NULL;
-
-        if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-            while (1) {
-                ASTNode *arg = parse_expression();
-                if (!arg) {
-                    fprintf(stderr, "Error parsing function call argument.\n");
-                    free_ast(node);
-                    free_ast(args);
-                    return NULL;
-                }
-
-                if (!args) {
-                    args = last_arg = arg;
-                } else {
-                    last_arg->next = arg;
-                    last_arg = arg;
-                }
-
-                if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
-                    break;
-                }
-
-                if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
-                    fprintf(stderr, "Error: Expected ',' or ')' in argument list.\n");
-                    free_ast(node);
-                    free_ast(args);
-                    return NULL;
-                }
-
-                advance(); // consume ','
-            }
+    // Loop for postfix operators: member access '.', index '[]', function call '()'
+    while (node != NULL) { // Condition ensures we don't loop if primary parsing failed
+        if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ".") == 0) {
+            node = parse_member_access(node); // Update node with the member access AST
+            if (!node) return NULL; // Error in member access
         }
+        else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "[") == 0) {
+            node = parse_member_access(node); // parse_member_access handles '[' for index
+            if (!node) return NULL; // Error in index access
+        }
+        else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
+            // This is a function call where `node` is the function identifier/expression
+            Token call_start_token = current_token; // For '('
+            advance(); // consume '('
+            ASTNode* args = NULL;
+            ASTNode* last_arg = NULL;
 
-        // Expect closing ')'
-        if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-            fprintf(stderr, "Error: Expected ')' after argument list.\n");
-            free_ast(node);
-            free_ast(args);
+            if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0)) {
+                while (1) {
+                    ASTNode* arg = parse_expression();
+                    if (!arg) {
+                        fprintf(stderr, "Error (L%d:%d): Failed to parse function call argument for '%s'.\n", call_start_token.line, call_start_token.col, node->value);
+                        free_ast(node); free_ast(args); return NULL;
+                    }
+                    if (!args) args = last_arg = arg;
+                    else { last_arg->next = arg; last_arg = arg; }
+
+                    if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) break;
+                    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
+                        fprintf(stderr, "Error (L%d:%d): Expected ',' or ')' in argument list for '%s'.\n", current_token.line, current_token.col, node->value);
+                        free_ast(node); free_ast(args); return NULL;
+                    }
+                    advance();
+                }
+            }
+            if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
+                fprintf(stderr, "Error (L%d:%d): Expected ')' to close argument list for '%s'.\n", current_token.line, current_token.col, node->value);
+                free_ast(node); free_ast(args); return NULL;
+            }
+            advance();
+
+            // Create AST_CALL node. `node` is the function being called.
+            // If `node` was AST_MEMBER_ACCESS (obj.method), its value is "method", left is "obj".
+            ASTNode* call_node = create_node(AST_CALL, node->value, node->line, node->col);
+            call_node->left = args;
+            if (node->type == AST_MEMBER_ACCESS) {
+                call_node->right = node->left; // The object/class expression
+                strncpy(call_node->value, node->value, sizeof(call_node->value) - 1); // The method name from member access
+                // The original 'node' (which was AST_MEMBER_ACCESS) is now replaced by 'call_node'.
+                // We need to free the old 'node' to avoid memory leak if it was heap allocated.
+                // However, 'node' is just a pointer. If parse_member_access returned a new node,
+                // the old 'target' was its child.
+                // This part is tricky. Let's assume `node` points to the AST_MEMBER_ACCESS node.
+                // We are effectively "upgrading" it to a call.
+                // We need to ensure the original target (node->left) isn't lost if node itself is freed.
+                ASTNode* target_for_call = node->left; // Save target from member access
+                node->left = NULL; // Detach from old member access node before freeing it
+                free_ast(node);    // Free the member access node
+                call_node->right = target_for_call; // Set the target for the call
+            }
+            else {
+                call_node->right = NULL; // Plain function call, no specific target object
+            }
+            node = call_node; // Update node to be the new AST_CALL node
+        }
+        else {
+            break; // Not a postfix operator we handle here, end loop
+        }
+    }
+    return node;
+}
+
+
+// Simplified parse_member_access called by parse_primary's loop
+// It handles ONE level of '.' or '[' access.
+static ASTNode* parse_member_access(ASTNode* target) {
+    Token op_token = current_token;
+
+    if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ".") == 0) {
+        advance();
+        if (current_token.type != TOKEN_IDENTIFIER) {
+            fprintf(stderr, "Error (L%d:%d): Expected identifier for member access after '.'.\n", op_token.line, op_token.col);
+            free_ast(target);
             return NULL;
         }
-        advance(); // consume ')'
 
-        // Build AST_CALL node
-        ASTNode *call_node = create_node(AST_CALL, node->value);
-        call_node->left = args;
-        // For plain calls there is no target object; evaluator will treat this as global/static
-        call_node->right = NULL;
+        ASTNode* member_node = create_node(AST_MEMBER_ACCESS, current_token.text, op_token.line, op_token.col);
+        member_node->left = target;
+        advance();
+        return member_node;
 
-        node = call_node;
     }
-
-    if(node) {
-        return parse_member_access(node);
-    }
-    return NULL;
-}
-
-static ASTNode* parse_member_access(ASTNode* target) {
-    while (current_token.type == TOKEN_SYMBOL && (strcmp(current_token.text, ".") == 0 || strcmp(current_token.text, "[") == 0)) {
-        if (strcmp(current_token.text, ".") == 0) {
-            advance(); // consume '.'
-            if (current_token.type != TOKEN_IDENTIFIER) {
-                fprintf(stderr, "Error: Expected identifier for member access.\n");
-                free_ast(target);
-                return NULL;
-            }
-            
-            // Create member access node
-            ASTNode* member_node = create_node(AST_MEMBER_ACCESS, current_token.text);
-            member_node->left = target;
-            target = member_node;
-            advance(); // consume identifier
-            
-            // Check if this is a method call
-            if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
-                advance(); // consume '('
-                
-                // Parse arguments
-                ASTNode* args = NULL;
-                ASTNode* last_arg = NULL;
-                
-                if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-                    while (1) {
-                        ASTNode* arg = parse_expression();
-                        if (!arg) {
-                            fprintf(stderr, "Error parsing method argument.\n");
-                            free_ast(target);
-                            free_ast(args);
-                            return NULL;
-                        }
-                        
-                        if (!args) {
-                            args = last_arg = arg;
-                        } else {
-                            last_arg->next = arg;
-                            last_arg = arg;
-                        }
-                        
-                        if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
-                            break;
-                        }
-                        
-                        if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
-                            fprintf(stderr, "Error: Expected ',' or ')' in method arguments.\n");
-                            free_ast(target);
-                            free_ast(args);
-                            return NULL;
-                        }
-                        advance(); // consume ','
-                    }
-                }
-                
-                advance(); // consume ')'
-                
-                // Convert the member access to a method call
-                ASTNode* method_call = create_node(AST_CALL, member_node->value);
-                method_call->left = args;
-                member_node->type = AST_MEMBER_ACCESS; // Ensure it's a member access
-                method_call->right = member_node->left; // Store the target object
-                free(member_node); // Free the original member_node
-                target = method_call;
-            }
-        } else { // It's '['
-            advance(); // consume '['
-            ASTNode* index_expr = parse_expression();
-            if (!index_expr) {
-                fprintf(stderr, "Error: Expected expression for index access.\n");
-                free_ast(target);
-                return NULL;
-            }
-            ASTNode* index_node = create_node(AST_INDEX_ACCESS, "[]");
-            index_node->left = target;
-            index_node->right = index_expr;
-            target = index_node;
-            if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "]") != 0) {
-                fprintf(stderr, "Error: Expected ']'.\n");
-                free_ast(target);
-                return NULL;
-            }
-            advance(); // consume ']'
+    else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "[") == 0) {
+        advance();
+        ASTNode* index_expr = parse_expression();
+        if (!index_expr) {
+            fprintf(stderr, "Error (L%d:%d): Expected expression for index access.\n", op_token.line, op_token.col);
+            free_ast(target);
+            return NULL;
         }
+        ASTNode* index_node = create_node(AST_INDEX_ACCESS, "[]", op_token.line, op_token.col);
+        index_node->left = target;
+        index_node->right = index_expr;
+
+        if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "]") != 0) {
+            fprintf(stderr, "Error (L%d:%d): Expected ']'.\n", current_token.line, current_token.col);
+            free_ast(target); free_ast(index_expr); free_ast(index_node);
+            return NULL;
+        }
+        advance();
+        return index_node;
     }
-    return target;
+    return target; // Should not be reached if called correctly from parse_primary loop
 }
+
 
 static ASTNode* parse_literal_or_identifier() {
     ASTNodeType type;
-    switch(current_token.type) {
-        case TOKEN_NUMBER:
-        case TOKEN_STRING:
-        case TOKEN_BOOL:
-            type = AST_LITERAL;
-            break;
-        case TOKEN_IDENTIFIER:
-            type = AST_IDENTIFIER;
-            break;
-        default:
-            return NULL;
+    Token current_start_token = current_token;
+
+    switch (current_token.type) {
+    case TOKEN_NUMBER:
+        type = AST_LITERAL;
+        break;
+    case TOKEN_STRING:
+        type = AST_LITERAL;
+        break;
+    case TOKEN_BOOL:
+        type = AST_LITERAL;
+        break;
+    case TOKEN_IDENTIFIER:
+        type = AST_IDENTIFIER;
+        break;
+    default:
+        fprintf(stderr, "Error (L%d:%d): Expected literal or identifier, got '%s'.\n", current_start_token.line, current_start_token.col, current_start_token.text);
+        return NULL;
     }
-    ASTNode* node = create_node(type, current_token.text);
+    ASTNode* node = create_node(type, current_token.text, current_start_token.line, current_start_token.col);
+    if (type == AST_LITERAL) { // Set data_type for literals
+        if (current_token.type == TOKEN_NUMBER) {
+            strncpy(node->data_type, strchr(current_token.text, '.') ? "float" : "int", sizeof(node->data_type) - 1);
+        }
+        else if (current_token.type == TOKEN_STRING) {
+            strncpy(node->data_type, "string", sizeof(node->data_type) - 1);
+        }
+        else if (current_token.type == TOKEN_BOOL) { // Should be "true" or "false"
+            strncpy(node->data_type, "bool", sizeof(node->data_type) - 1);
+        }
+        node->data_type[sizeof(node->data_type) - 1] = '\0';
+    }
     advance();
     return node;
 }
 
 
-// --- Stubs for other parsers ---
-// These need to be implemented properly
+static ASTNode* parse_variable_declaration() {
+    Token keyword_token = current_token;
+    advance();
 
-static ASTNode* parse_variable_declaration() { 
-    advance(); // consume 'var' or 'let'
-    
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Unexpected token after identifier at line %d, col %d\n", 
-                current_token.line, current_token.col);
+        fprintf(stderr, "Error (L%d:%d): Expected identifier after '%s'\n",
+            keyword_token.line, keyword_token.col, keyword_token.text); // Use keyword's line/col
         return NULL;
     }
-    
-    // Create variable declaration node with the identifier as name
-    ASTNode* var_decl = create_node(AST_VAR_DECL, current_token.text);
-    ASTNode* id_node = create_node(AST_IDENTIFIER, current_token.text);
-    var_decl->left = id_node;
-    advance(); // consume identifier
-    
-    // Check for initialization
-    if (current_token.type == TOKEN_OPERATOR && strcmp(current_token.text, "=") == 0) {
-        advance(); // consume '='
-        
-        // Parse the initializer expression
-        ASTNode* initializer = parse_expression();
-        if (!initializer) {
-            fprintf(stderr, "Error: Failed to parse initializer expression\n");
-            free_ast(var_decl);
-            return NULL;
+
+    ASTNode* var_decl = create_node(AST_VAR_DECL, current_token.text, keyword_token.line, keyword_token.col);
+    var_decl->left = NULL; // For untyped VarDecl, left is not used for name node. Name is in value.
+    advance();
+
+    if ((current_token.type == TOKEN_OPERATOR || current_token.type == TOKEN_SYMBOL) && strcmp(current_token.text, "=") == 0) {
+        advance();
+        var_decl->right = parse_expression();
+        if (!var_decl->right) {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse initializer expression for '%s'\n", current_token.line, current_token.col, var_decl->value);
+            free_ast(var_decl); return NULL;
         }
-        var_decl->right = initializer;
     }
-    
-    // Expect semicolon
+    else {
+        var_decl->right = NULL;
+    }
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
-        fprintf(stderr, "Error: Expected ';' after variable declaration\n");
-        free_ast(var_decl);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after variable declaration of '%s'\n", current_token.line, current_token.col, var_decl->value);
+        free_ast(var_decl); return NULL;
     }
-    advance(); // consume ';'
-    
+    advance();
     return var_decl;
 }
 
-static ASTNode* parse_if_statement() { 
-    fprintf(stderr, "Parsing 'if' is not fully implemented.\n");
+static ASTNode* parse_if_statement() {
+    Token if_keyword_token = current_token;
     advance();
-    return create_node(AST_UNKNOWN, "if_stub");
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after 'if'.\n", if_keyword_token.line, if_keyword_token.col);
+        return NULL;
+    }
+    advance();
+
+    ASTNode* condition = parse_expression();
+    if (!condition) {
+        // Error already reported by parse_expression
+        return NULL;
+    }
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected ')' after if-condition.\n", current_token.line, current_token.col);
+        free_ast(condition); return NULL;
+    }
+    advance();
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '{' to open if-body.\n", current_token.line, current_token.col);
+        free_ast(condition); return NULL;
+    }
+    Token then_body_start_token = current_token;
+    advance();
+
+    ASTNode* then_block = parse_block();
+    if (!then_block) {
+        fprintf(stderr, "Error (L%d:%d): Failed to parse 'then' block for if statement.\n", then_body_start_token.line, then_body_start_token.col);
+        free_ast(condition); return NULL;
+    }
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close if-body. Got '%s'.\n", current_token.line, current_token.col, current_token.text);
+        free_ast(condition); free_ast(then_block); return NULL;
+    }
+    advance();
+
+    ASTNode* if_node = create_node(AST_IF, "if", if_keyword_token.line, if_keyword_token.col);
+    if_node->left = condition;
+    if_node->right = then_block;
+
+    if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "else") == 0) {
+        Token else_keyword_token = current_token;
+        advance();
+
+        ASTNode* else_node_content = NULL;
+        if (current_token.type == TOKEN_KEYWORD && strcmp(current_token.text, "if") == 0) {
+            else_node_content = parse_if_statement();
+            if (!else_node_content) { free_ast(if_node); return NULL; }
+        }
+        else if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "{") == 0) {
+            Token else_body_start_token = current_token;
+            advance();
+            else_node_content = parse_block();
+            if (!else_node_content) {
+                fprintf(stderr, "Error (L%d:%d): Failed to parse 'else' block.\n", else_body_start_token.line, else_body_start_token.col);
+                free_ast(if_node); return NULL;
+            }
+            if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
+                fprintf(stderr, "Error (L%d:%d): Expected '}' to close else-body. Got '%s'.\n", current_token.line, current_token.col, current_token.text);
+                free_ast(if_node); free_ast(else_node_content); return NULL;
+            }
+            advance();
+        }
+        else {
+            fprintf(stderr, "Error (L%d:%d): Expected '{' or 'if' after 'else'.\n", else_keyword_token.line, else_keyword_token.col);
+            free_ast(if_node); return NULL;
+        }
+
+        ASTNode* else_ast_node = create_node(AST_ELSE, "else", else_keyword_token.line, else_keyword_token.col);
+        else_ast_node->left = else_node_content;
+        if_node->next = else_ast_node;
+    }
+    return if_node;
 }
 
+
 static ASTNode* parse_while_statement() {
-    /* Syntax supported:
-       while ( condition ) { body }
-       Both the condition and the body are parsed via existing helpers so they
-       can contain any expressions/statements already implemented elsewhere. */
+    Token while_keyword_token = current_token;
+    advance();
 
-    advance(); /* consume 'while' */
-
-    /* Expect '(' */
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
-        fprintf(stderr, "Error: Expected '(' after 'while'.\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after 'while'.\n", while_keyword_token.line, while_keyword_token.col);
         return NULL;
     }
-    advance(); /* consume '(' */
+    advance();
 
-    /* Parse condition expression */
-    ASTNode *condition = parse_expression();
-    if (!condition) {
-        fprintf(stderr, "Error: Failed to parse while-condition expression.\n");
-        return NULL;
-    }
+    ASTNode* condition = parse_expression();
+    if (!condition) { return NULL; }
 
-    /* Expect ')' */
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-        fprintf(stderr, "Error: Expected ')' after while-condition.\n");
-        free_ast(condition);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected ')' after while-condition.\n", current_token.line, current_token.col);
+        free_ast(condition); return NULL;
     }
-    advance(); /* consume ')' */
+    advance();
 
-    /* Expect '{' opening block */
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
-        fprintf(stderr, "Error: Expected '{' to open while-body.\n");
-        free_ast(condition);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected '{' to open while-body.\n", current_token.line, current_token.col);
+        free_ast(condition); return NULL;
     }
-    advance(); /* consume '{' */
+    Token body_start_token = current_token;
+    advance();
 
-    /* Parse body statements */
-    ASTNode *body = parse_block();
+    ASTNode* body = parse_block();
+    if (!body) {
+        fprintf(stderr, "Error (L%d:%d): Failed to parse while-body.\n", body_start_token.line, body_start_token.col);
+        free_ast(condition); return NULL;
+    }
 
-    /* Expect closing '}' */
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
-        fprintf(stderr, "Error: Expected '}' to close while-body.\n");
-        free_ast(condition);
-        free_ast(body);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close while-body. Got '%s'.\n", current_token.line, current_token.col, current_token.text);
+        free_ast(condition); free_ast(body); return NULL;
     }
-    advance(); /* consume '}' */
+    advance();
 
-    /* Build AST_WHILE node */
-    ASTNode *while_node = create_node(AST_WHILE, "while");
-    while_node->left = condition; /* condition */
-    while_node->right = body;      /* body */
+    ASTNode* while_node = create_node(AST_WHILE, "while", while_keyword_token.line, while_keyword_token.col);
+    while_node->left = condition;
+    while_node->right = body;
     return while_node;
 }
 
-static ASTNode* parse_for_statement() { 
-    fprintf(stderr, "Parsing 'for' is not fully implemented.\n");
+static ASTNode* parse_for_statement() {
+    Token for_keyword_token = current_token;
     advance();
-    return create_node(AST_UNKNOWN, "for_stub");
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after 'for'.\n", for_keyword_token.line, for_keyword_token.col);
+        return NULL;
+    }
+    advance();
+
+    ASTNode* init_expr = NULL;
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0)) {
+        // Allow full variable declaration (typed or untyped) or an expression.
+        // A full var decl statement includes its own ';'. We must NOT consume the loop's ';'.
+        Token before_init = current_token;
+        if ((current_token.type == TOKEN_KEYWORD && (strcmp(current_token.text, "let") == 0 || strcmp(current_token.text, "var") == 0)) ||
+            is_builtin_type_keyword(current_token.text) ||
+            (current_token.type == TOKEN_IDENTIFIER && is_builtin_type_keyword(peek_token().text))
+            ) {
+            // This needs a special "parse_declaration_without_semicolon" or modify existing ones.
+            // For now, simplified: parse as statement, then check for semicolon.
+            // This is tricky. A common way is to have parse_statement return what it parsed,
+            // and then check if current_token is ';'. For for-loop, we expect ';' after init, not within.
+            // Let's assume init part can be an expression, which covers `i=0`. `let i=0` needs more.
+            // For simplicity, using parse_expression for init for now.
+            init_expr = parse_expression();
+            if (!init_expr && strcmp(current_token.text, ";") != 0) { // If failed AND not just an empty init
+                fprintf(stderr, "Error (L%d:%d): Failed to parse for-loop initializer.\n", before_init.line, before_init.col);
+                return NULL;
+            }
+        }
+        else if (strcmp(current_token.text, ";") != 0) { // Not empty, not a declaration keyword -> must be expression
+            init_expr = parse_expression();
+            if (!init_expr) { // parse_expression would have reported error
+                fprintf(stderr, "Error (L%d:%d): Failed to parse for-loop initializer expression.\n", before_init.line, before_init.col);
+                return NULL;
+            }
+        }
+    }
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after for-loop initializer.\n", current_token.line, current_token.col);
+        free_ast(init_expr); return NULL;
+    }
+    advance();
+
+    ASTNode* cond_expr = NULL;
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0)) {
+        cond_expr = parse_expression();
+        if (!cond_expr && strcmp(current_token.text, ";") != 0) {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse for-loop condition.\n", current_token.line, current_token.col);
+            free_ast(init_expr); return NULL;
+        }
+    }
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after for-loop condition.\n", current_token.line, current_token.col);
+        free_ast(init_expr); free_ast(cond_expr); return NULL;
+    }
+    advance();
+
+    ASTNode* incr_expr = NULL;
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0)) {
+        incr_expr = parse_expression();
+        if (!incr_expr && strcmp(current_token.text, ")") != 0) {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse for-loop increment.\n", current_token.line, current_token.col);
+            free_ast(init_expr); free_ast(cond_expr); return NULL;
+        }
+    }
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected ')' after for-loop increment.\n", current_token.line, current_token.col);
+        free_ast(init_expr); free_ast(cond_expr); free_ast(incr_expr); return NULL;
+    }
+    advance();
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '{' to open for-body.\n", current_token.line, current_token.col);
+        free_ast(init_expr); free_ast(cond_expr); free_ast(incr_expr); return NULL;
+    }
+    Token body_start_token = current_token;
+    advance();
+
+    ASTNode* body_block = parse_block();
+    if (!body_block) {
+        fprintf(stderr, "Error (L%d:%d): Failed to parse for-body.\n", body_start_token.line, body_start_token.col);
+        free_ast(init_expr); free_ast(cond_expr); free_ast(incr_expr); return NULL;
+    }
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close for-body. Got '%s'.\n", current_token.line, current_token.col, current_token.text);
+        free_ast(init_expr); free_ast(cond_expr); free_ast(incr_expr); free_ast(body_block); return NULL;
+    }
+    advance();
+
+    ASTNode* for_node = create_node(AST_FOR, "for", for_keyword_token.line, for_keyword_token.col);
+
+    ASTNode* current_control = NULL;
+    if (init_expr) {
+        for_node->left = init_expr;
+        current_control = init_expr;
+    }
+    if (cond_expr) {
+        if (current_control) current_control->next = cond_expr;
+        else for_node->left = cond_expr;
+        current_control = cond_expr;
+    }
+    if (incr_expr) {
+        if (current_control) current_control->next = incr_expr;
+        else for_node->left = incr_expr;
+    }
+    if (current_control && !incr_expr && cond_expr) { // e.g. for(init; cond;)
+        cond_expr->next = NULL;
+    }
+    else if (current_control && !cond_expr && init_expr) { // e.g. for(init;;incr) or for(init;;)
+        init_expr->next = incr_expr; // incr_expr could be null here too
+    }
+    // If only init_expr: for_node->left = init_expr, init_expr->next = NULL (implicitly by create_node)
+    // If no control parts, for_node->left is NULL.
+
+    for_node->right = body_block;
+    return for_node;
 }
 
-static ASTNode* parse_return_statement() { 
-    advance(); // consume 'return'
-    ASTNode* node = create_node(AST_RETURN, "return");
-    node->left = parse_expression();
-    if(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0) {
+
+static ASTNode* parse_return_statement() {
+    Token return_keyword_token = current_token;
+    advance();
+    ASTNode* node = create_node(AST_RETURN, "return", return_keyword_token.line, return_keyword_token.col);
+
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0)) {
+        node->left = parse_expression();
+        if (!node->left && !(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0)) {
+            fprintf(stderr, "Error (L%d:%d): Failed to parse return expression.\n", current_token.line, current_token.col);
+            free_ast(node); return NULL;
+        }
+    }
+    else {
+        node->left = NULL;
+    }
+
+    if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ";") == 0) {
         advance();
-    } else {
-        fprintf(stderr, "Warning: Missing semicolon after return statement.\n");
+    }
+    else {
+        fprintf(stderr, "Warning (L%d:%d): Missing semicolon after return statement.\n", return_keyword_token.line, return_keyword_token.col);
     }
     return node;
 }
 
-static ASTNode* parse_function() { 
-    advance(); // consume 'function'
-    
+static ASTNode* parse_function() {
+    Token func_keyword_token = current_token;
+    advance();
+
     if (current_token.type != TOKEN_IDENTIFIER) {
-        fprintf(stderr, "Error: Expected function name\n");
+        fprintf(stderr, "Error (L%d:%d): Expected function name\n", func_keyword_token.line, func_keyword_token.col);
         return NULL;
     }
-    
-    ASTNode* func = create_node(AST_FUNCTION, current_token.text);
-    advance(); // consume function name
-    
-    // Parse parameters
+
+    ASTNode* func = create_node(AST_FUNCTION, current_token.text, func_keyword_token.line, func_keyword_token.col);
+    Token func_name_token = current_token;
+    advance();
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
-        fprintf(stderr, "Error: Expected '(' after function name\n");
-        free_ast(func);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after function name '%s'\n", func_name_token.line, func_name_token.col, func_name_token.text);
+        free_ast(func); return NULL;
     }
-    advance(); // consume '('
-    
-    // Parse parameter list
+    advance();
+
     ASTNode* params = NULL;
     ASTNode* last_param = NULL;
-    
-    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
+
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0)) {
         while (1) {
             if (current_token.type != TOKEN_IDENTIFIER) {
-                fprintf(stderr, "Error: Expected parameter name\n");
-                free_ast(func);
-                free_ast(params);
-                return NULL;
+                fprintf(stderr, "Error (L%d:%d): Expected parameter name in function '%s'\n", current_token.line, current_token.col, func_name_token.text);
+                free_ast(func); free_ast(params); return NULL;
             }
-            
-            ASTNode* param = create_node(AST_PARAMETER, current_token.text);
-            advance(); // consume parameter name
-            
-            if (params == NULL) {
-                params = last_param = param;
-            } else {
-                last_param->next = param;
-                last_param = param;
-            }
-            
-            if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
-                break;
-            }
-            
+
+            ASTNode* param = create_node(AST_PARAMETER, current_token.text, current_token.line, current_token.col);
+            advance();
+
+            if (params == NULL) params = last_param = param;
+            else { last_param->next = param; last_param = param; }
+
+            if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) break;
             if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
-                fprintf(stderr, "Error: Expected ',' or ')' in parameter list\n");
-                free_ast(func);
-                free_ast(params);
-                return NULL;
+                fprintf(stderr, "Error (L%d:%d): Expected ',' or ')' in parameter list for '%s'\n", current_token.line, current_token.col, func_name_token.text);
+                free_ast(func); free_ast(params); return NULL;
             }
-            
-            advance(); // consume ','
+            advance();
         }
     }
-    
+
     func->left = params;
-    advance(); // consume ')'
-    
-    // Parse function body
+    if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) {
+        advance();
+    }
+    else {
+        fprintf(stderr, "Error (L%d:%d): Expected ')' to close parameter list for '%s'.\n", current_token.line, current_token.col, func_name_token.text);
+        free_ast(func); return NULL;
+    }
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "{") != 0) {
-        fprintf(stderr, "Error: Expected '{' to begin function body\n");
-        free_ast(func);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected '{' to begin function body for '%s'\n", current_token.line, current_token.col, func_name_token.text);
+        free_ast(func); return NULL;
     }
-    
-    advance(); // consume '{'
+    Token body_start_token = current_token;
+    advance();
     func->right = parse_block();
-    
-    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
-        fprintf(stderr, "Error: Expected '}' to close function body\n");
-        free_ast(func);
-        return NULL;
+    if (!func->right) {
+        fprintf(stderr, "Error (L%d:%d): Failed to parse function body for '%s'\n", body_start_token.line, body_start_token.col, func_name_token.text);
+        free_ast(func); return NULL;
     }
-    
-    advance(); // consume '}'
+
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "}") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Expected '}' to close function body for '%s'. Got '%s'.\n", current_token.line, current_token.col, func_name_token.text, current_token.text);
+        free_ast(func); return NULL;
+    }
+    advance();
     return func;
 }
 
-static ASTNode* parse_print_statement() { 
-    advance(); // consume 'print'
-    
+static ASTNode* parse_print_statement() {
+    Token print_keyword_token = current_token;
+    advance();
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "(") != 0) {
-        fprintf(stderr, "Error: Expected '(' after print.\n");
+        fprintf(stderr, "Error (L%d:%d): Expected '(' after print.\n", print_keyword_token.line, print_keyword_token.col);
         return NULL;
     }
-    advance(); // consume '('
-    
+    advance();
+
     ASTNode* expr = parse_expression();
     if (!expr) {
-        fprintf(stderr, "Error: Expected expression in print statement.\n");
+        fprintf(stderr, "Error (L%d:%d): Expected expression in print statement.\n", current_token.line, current_token.col);
         return NULL;
     }
-    
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
-        fprintf(stderr, "Error: Expected ')' after print argument\n");
-        free_ast(expr);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected ')' after print argument\n", current_token.line, current_token.col);
+        free_ast(expr); return NULL;
     }
-    advance(); // consume ')'
-    
+    advance();
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
-        fprintf(stderr, "Error: Expected ';' after print statement.\n");
-        free_ast(expr);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after print statement.\n", current_token.line, current_token.col);
+        free_ast(expr); return NULL;
     }
-    advance(); // consume ';'
-    
-    ASTNode* print_node = create_node(AST_PRINT, "print");
+    advance();
+
+    ASTNode* print_node = create_node(AST_PRINT, "print", print_keyword_token.line, print_keyword_token.col);
     print_node->left = expr;
     return print_node;
 }
 
 static ASTNode* parse_array_literal() {
-    /* Handles either '[' elem1, elem2, ... ']' or '{' elem1, elem2 ... '}' */
-    const char *open_sym = current_token.text;
-    const char *close_sym = (strcmp(open_sym, "[") == 0) ? "]" : "}";
+    Token start_token = current_token; // '['
+    advance();
 
-    advance(); /* consume opening symbol */
+    ASTNode* head_element = NULL;
+    ASTNode* tail_element = NULL;
 
-    /* For now we collect element texts into a single comma-separated string so
-       the evaluator / native wrappers can parse them later without needing a
-       full AST representation per element. This keeps implementation simple
-       while unblocking compilation of code that merely forwards raw vertex
-       data to native calls. */
+    if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "]") == 0)) {
+        while (1) {
+            ASTNode* elem_expr = parse_expression();
+            if (!elem_expr) {
+                fprintf(stderr, "Error (L%d:%d): Failed to parse array element.\n", current_token.line, current_token.col);
+                free_ast(head_element); return NULL;
+            }
+            if (!head_element) head_element = tail_element = elem_expr;
+            else { tail_element->next = elem_expr; tail_element = elem_expr; }
 
-    char combined[1024] = "";
-    int first = 1;
-    while (current_token.type != TOKEN_EOF && !(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, close_sym) == 0)) {
-        /* Append token text unless it's whitespace/comma we will manually add */
-        if (current_token.type != TOKEN_SYMBOL || (strcmp(current_token.text, ",") != 0)) {
-            if (!first) strcat(combined, " ");
-            strcat(combined, current_token.text);
-            first = 0;
+            if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "]") == 0) break;
+            if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
+                fprintf(stderr, "Error (L%d:%d): Expected ',' or ']' in array literal.\n", current_token.line, current_token.col);
+                free_ast(head_element); return NULL;
+            }
+            advance();
         }
-        advance();
     }
 
-    if (current_token.type == TOKEN_EOF) {
-        fprintf(stderr, "Error: Unterminated array literal, expected '%s'.\n", close_sym);
-        return NULL;
+    if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, "]") != 0) {
+        fprintf(stderr, "Error (L%d:%d): Unterminated array literal, expected ']'.\n", start_token.line, start_token.col);
+        free_ast(head_element); return NULL;
     }
-    advance(); /* consume close_sym */
+    advance();
 
-    ASTNode *arr_node = create_node(AST_ARRAY, combined);
+    ASTNode* arr_node = create_node(AST_ARRAY, "array_literal", start_token.line, start_token.col);
+    arr_node->left = head_element;
+    strncpy(arr_node->data_type, "array", sizeof(arr_node->data_type) - 1);
+    arr_node->data_type[sizeof(arr_node->data_type) - 1] = '\0';
     return arr_node;
 }
 
+
 static ASTNode* parse_new_expression() {
-    advance(); // new
-    if(current_token.type != TOKEN_IDENTIFIER) {
-         fprintf(stderr, "Error: Expected class name after 'new'.\n");
+    Token new_keyword_token = current_token;
+    advance();
+    if (current_token.type != TOKEN_IDENTIFIER) {
+        fprintf(stderr, "Error (L%d:%d): Expected class name after 'new'.\n", new_keyword_token.line, new_keyword_token.col);
         return NULL;
     }
-    ASTNode* node = create_node(AST_NEW, current_token.text);
+    ASTNode* node = create_node(AST_NEW, current_token.text, new_keyword_token.line, new_keyword_token.col);
     strncpy(node->data_type, current_token.text, sizeof(node->data_type) - 1);
     node->data_type[sizeof(node->data_type) - 1] = '\0';
+    Token class_name_token = current_token;
     advance();
-    
-    // Arguments
-    if(strcmp(current_token.text, "(") != 0) {
-        return node; // No constructor args
-    }
-    advance();
-    
-    ASTNode* args = NULL;
-    ASTNode* last_arg = NULL;
 
-    if (strcmp(current_token.text, ")") != 0) {
-        while(1) {
-            ASTNode* arg = parse_expression();
-            if(!arg) {
-                fprintf(stderr, "Error parsing constructor argument.\n");
-                free_ast(node);
-                free_ast(args);
-                return NULL;
+    if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, "(") == 0) {
+        advance();
+
+        ASTNode* args = NULL;
+        ASTNode* last_arg = NULL;
+
+        if (!(current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0)) {
+            while (1) {
+                ASTNode* arg = parse_expression();
+                if (!arg) {
+                    fprintf(stderr, "Error (L%d:%d): Failed to parse constructor argument for 'new %s'.\n", current_token.line, current_token.col, class_name_token.text);
+                    free_ast(node); free_ast(args); return NULL;
+                }
+                if (args == NULL) args = last_arg = arg;
+                else { last_arg->next = arg; last_arg = arg; }
+
+                if (current_token.type == TOKEN_SYMBOL && strcmp(current_token.text, ")") == 0) break;
+                if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ",") != 0) {
+                    fprintf(stderr, "Error (L%d:%d): Expected ',' or ')' in constructor arguments for 'new %s'.\n", current_token.line, current_token.col, class_name_token.text);
+                    free_ast(node); free_ast(args); return NULL;
+                }
+                advance();
             }
-            if(args == NULL) {
-                args = last_arg = arg;
-            } else {
-                last_arg->next = arg;
-                last_arg = arg;
-            }
-            if(strcmp(current_token.text, ")") == 0) break;
-            if(strcmp(current_token.text, ",") != 0) {
-                fprintf(stderr, "Error: expected ',' or ')' in arguments.\n");
-                free_ast(node);
-                free_ast(args);
-                return NULL;
-            }
-            advance(); // consume ','
         }
+        if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ")") != 0) {
+            fprintf(stderr, "Error (L%d:%d): Expected ')' to close constructor arguments for 'new %s'.\n", current_token.line, current_token.col, class_name_token.text);
+            free_ast(node); free_ast(args); return NULL;
+        }
+        advance();
+        node->left = args;
     }
-    advance(); // consume ')'
-    node->left = args;
+    else {
+        node->left = NULL;
+    }
     return node;
 }
 
 static ASTNode* parse_this_reference() {
-    advance(); // this
-    return create_node(AST_THIS, "this");
+    Token this_token = current_token;
+    advance();
+    ASTNode* node = create_node(AST_THIS, "this", this_token.line, this_token.col);
+    return node;
 }
 
 static ASTNode* parse_import() {
-    advance(); // consume 'import'
-    
+    Token import_keyword_token = current_token;
+    advance();
+
     if (current_token.type != TOKEN_STRING) {
-        fprintf(stderr, "Error: Expected string literal after import\n");
+        fprintf(stderr, "Error (L%d:%d): Expected string literal for module name after import\n", import_keyword_token.line, import_keyword_token.col);
         return NULL;
     }
-    
-    ASTNode* import_node = create_node(AST_IMPORT, current_token.text);
-    advance(); // consume module name
-    
+
+    ASTNode* import_node = create_node(AST_IMPORT, current_token.text, import_keyword_token.line, import_keyword_token.col);
+    advance();
+
     if (current_token.type != TOKEN_SYMBOL || strcmp(current_token.text, ";") != 0) {
-        fprintf(stderr, "Error: Expected ';' after import statement\n");
-        free_ast(import_node);
-        return NULL;
+        fprintf(stderr, "Error (L%d:%d): Expected ';' after import statement\n", current_token.line, current_token.col);
+        free_ast(import_node); return NULL;
     }
-    advance(); // consume ';'
-    
+    advance();
     return import_node;
 }

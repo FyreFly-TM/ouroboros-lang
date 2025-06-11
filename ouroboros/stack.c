@@ -3,46 +3,44 @@
 #include <string.h>
 #include "stack.h"
 
-// Create a new stack frame with the given name and parent
 StackFrame* create_stack_frame(const char* name, StackFrame* parent) {
-    StackFrame* frame = (StackFrame*)malloc(sizeof(StackFrame));
+    StackFrame* frame = (StackFrame*)calloc(1, sizeof(StackFrame)); // Use calloc
     if (!frame) {
-        fprintf(stderr, "Error: Memory allocation failed for stack frame\n");
-        return NULL;
+        fprintf(stderr, "Error: Memory allocation failed for stack frame '%s'\n", name);
+        // In a real application, might try to recover or throw a more specific error.
+        exit(EXIT_FAILURE); // For simplicity, exit on critical alloc failure
     }
     
     strncpy(frame->name, name, sizeof(frame->name) - 1);
     frame->name[sizeof(frame->name) - 1] = '\0';
     
-    // Store the function name for debugging / access control
+    // If 'name' is a function call, function_name can be the same.
+    // If it's a block, function_name might be inherited or set to the enclosing function.
+    // For now, simple copy.
     strncpy(frame->function_name, name, sizeof(frame->function_name) - 1);
     frame->function_name[sizeof(frame->function_name) - 1] = '\0';
     
-    // Initialize return value pointer
-    frame->return_value = NULL;
-    
     frame->parent = parent;
-    frame->var_count = 0;
+    // var_count is 0 due to calloc
     
     return frame;
 }
 
-// Destroy a stack frame and free memory
 void destroy_stack_frame(StackFrame* frame) {
     if (frame) {
-        if (frame->return_value) {
-            free(frame->return_value);
-            frame->return_value = NULL;
-        }
+        // Variables are stack-allocated within the frame struct, so no individual free needed for them
+        // unless their `value` field becomes dynamically allocated.
         free(frame);
     }
 }
 
-// Set a variable in the stack frame
 void set_variable(StackFrame* frame, const char* name, const char* value) {
-    if (!frame || !name || !value) return;
+    if (!frame || !name || !value) {
+        // fprintf(stderr, "Warning: Attempt to set variable with null frame, name, or value.\n");
+        return;
+    }
     
-    // Check if the variable already exists
+    // Try to update existing variable in the current frame only
     for (int i = 0; i < frame->var_count; i++) {
         if (strcmp(frame->variables[i].name, name) == 0) {
             strncpy(frame->variables[i].value, value, sizeof(frame->variables[i].value) - 1);
@@ -51,7 +49,7 @@ void set_variable(StackFrame* frame, const char* name, const char* value) {
         }
     }
     
-    // If not found and there's space, add a new variable
+    // If not found in current frame, add as a new variable in the current frame
     if (frame->var_count < MAX_VARIABLES) {
         strncpy(frame->variables[frame->var_count].name, name, sizeof(frame->variables[frame->var_count].name) - 1);
         frame->variables[frame->var_count].name[sizeof(frame->variables[frame->var_count].name) - 1] = '\0';
@@ -61,26 +59,23 @@ void set_variable(StackFrame* frame, const char* name, const char* value) {
         
         frame->var_count++;
     } else {
-        fprintf(stderr, "Error: Stack frame variable limit reached\n");
+        fprintf(stderr, "Error: Stack frame '%s' variable limit (%d) reached when setting '%s'.\n", frame->name, MAX_VARIABLES, name);
+        // This is a critical runtime error.
     }
 }
 
-// Get a variable's value from the stack frame, searching parent frames if needed
 const char* get_variable(StackFrame* frame, const char* name) {
-    if (!frame || !name) return NULL;
-    
-    // Search in current frame
-    for (int i = 0; i < frame->var_count; i++) {
-        if (strcmp(frame->variables[i].name, name) == 0) {
-            return frame->variables[i].value;
+    if (!name) return NULL; // Or "undefined"
+
+    StackFrame* current_frame_iter = frame;
+    while (current_frame_iter) {
+        for (int i = 0; i < current_frame_iter->var_count; i++) {
+            if (strcmp(current_frame_iter->variables[i].name, name) == 0) {
+                return current_frame_iter->variables[i].value;
+            }
         }
+        current_frame_iter = current_frame_iter->parent; // Go to parent frame
     }
     
-    // If not found and there's a parent frame, search there
-    if (frame->parent) {
-        return get_variable(frame->parent, name);
-    }
-    
-    // Not found
-    return NULL;
-} 
+    return NULL; // Variable not found in this frame or any parent frames
+}
