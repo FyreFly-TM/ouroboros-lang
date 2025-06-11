@@ -42,6 +42,23 @@ static void skip_whitespace_string(int *line, int *col) {
             while ((c = string_getc()) != '\n' && c != EOF);
             (*line)++;
             *col = 1;
+        } else if (c == '/' && peek_string() == '*') {
+            // Multi-line comment: /* ... */
+            string_getc(); // consume '*'
+            (*col) += 2; // for /*
+            while ((c = string_getc()) != EOF) {
+                (*col)++;
+                if (c == '*') {
+                    if (peek_string() == '/') {
+                        string_getc(); // consume '/'
+                        (*col)++;
+                        break; // End of multi-line comment
+                    }
+                } else if (c == '\n') {
+                    (*line)++;
+                    *col = 1;
+                }
+            }
         } else {
             string_ungetc();
             break;
@@ -61,6 +78,23 @@ static void skip_whitespace(FILE *file, int *line, int *col) {
             while ((c = fgetc(file)) != '\n' && c != EOF);
             (*line)++;
             *col = 1;
+        } else if (c == '/' && peek(file) == '*') {
+            // Multi-line comment: /* ... */
+            fgetc(file); // consume '*'
+            (*col) += 2; // for /*
+            while ((c = fgetc(file)) != EOF) {
+                (*col)++;
+                if (c == '*') {
+                    if (peek(file) == '/') {
+                        fgetc(file); // consume '/'
+                        (*col)++;
+                        break; // End of multi-line comment
+                    }
+                } else if (c == '\n') {
+                    (*line)++;
+                    *col = 1;
+                }
+            }
         } else {
             ungetc(c, file);
             break;
@@ -79,13 +113,13 @@ static int is_operator_char(int c) {
 
 static const char *keywords[] = {
     "let", "const", "fn", "function", "return", "if", "else", "while", "for", "true", "false",
-    "class", "new", "import", "public", "private", "protected", "static", "null",
+    "class", "new", "import", "public", "private", "protected", "static", "null", "var",
     // Added new keywords for types and OOP
     "int", "float", "bool", "string", "void", "print", "struct", "this", "extends"
 };
 
 static int is_keyword(const char *text) {
-    for (int i = 0; i < sizeof(keywords)/sizeof(keywords[0]); i++) {
+    for (int i = 0; i < (int)(sizeof(keywords)/sizeof(keywords[0])); i++) {
         if (strcmp(text, keywords[i]) == 0) return 1;
     }
     return 0;
@@ -102,7 +136,7 @@ Token next_token(FILE *file, int *line, int *col) {
         int i = 0;
         tok.text[i++] = c;
         while ((c = fgetc(file)) != EOF && (isalnum(c) || c == '_')) {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
         }
         tok.text[i] = '\0';
         if (c != EOF) ungetc(c, file);
@@ -111,14 +145,27 @@ Token next_token(FILE *file, int *line, int *col) {
     } else if (isdigit(c)) {
         int i = 0;
         tok.text[i++] = c;
-        while ((c = fgetc(file)) != EOF && isdigit(c)) {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
-        }
-        // Check for decimal point
-        if (c == '.') {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+
+        // Hexadecimal literal? 0xFF style
+        if (c == '0' && (peek(file) == 'x' || peek(file) == 'X')) {
+            // Consume the 'x' or 'X'
+            c = fgetc(file);
+            tok.text[i++] = c;
+            // Read hex digits
+            while ((c = fgetc(file)) != EOF && isxdigit(c)) {
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+            }
+        } else {
+            // Decimal / float literal path
             while ((c = fgetc(file)) != EOF && isdigit(c)) {
-                if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+            }
+            // Check for decimal point
+            if (c == '.') {
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                while ((c = fgetc(file)) != EOF && isdigit(c)) {
+                    if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                }
             }
         }
         tok.text[i] = '\0';
@@ -127,7 +174,7 @@ Token next_token(FILE *file, int *line, int *col) {
     } else if (c == '"') {
         int i = 0;
         while ((c = fgetc(file)) != '"' && c != EOF) {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
         }
         tok.text[i] = '\0';
         tok.type = TOKEN_STRING;
@@ -160,7 +207,7 @@ Token next_token_string(int *line, int *col) {
         tok.text[i++] = c;
         (*col)++;
         while ((c = string_getc()) != EOF && (isalnum(c) || c == '_')) {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
             (*col)++;
         }
         tok.text[i] = '\0';
@@ -171,17 +218,33 @@ Token next_token_string(int *line, int *col) {
         int i = 0;
         tok.text[i++] = c;
         (*col)++;
-        while ((c = string_getc()) != EOF && isdigit(c)) {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+
+        // Hexadecimal literal? 0xFF style
+        if (c == '0' && (peek_string() == 'x' || peek_string() == 'X')) {
+            // Consume the 'x' or 'X'
+            c = string_getc();
+            tok.text[i++] = c;
             (*col)++;
-        }
-        // Check for decimal point
-        if (c == '.') {
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
-            (*col)++;
-            while ((c = string_getc()) != EOF && isdigit(c)) {
-                if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+            // Read hex digits
+            while ((c = string_getc()) != EOF && isxdigit(c)) {
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
                 (*col)++;
+            }
+            tok.text[i] = '\0';
+            tok.type = TOKEN_NUMBER;
+        } else {
+            // Decimal / float literal path
+            while ((c = string_getc()) != EOF && isdigit(c)) {
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+            }
+            // Check for decimal point
+            if (c == '.') {
+                if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                (*col)++;
+                while ((c = string_getc()) != EOF && isdigit(c)) {
+                    if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
+                    (*col)++;
+                }
             }
         }
         tok.text[i] = '\0';
@@ -210,7 +273,7 @@ Token next_token_string(int *line, int *col) {
                     default: break;
                 }
             }
-            if (i < sizeof(tok.text) - 1) tok.text[i++] = c;
+            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = c;
         }
         tok.text[i] = '\0';
         if (c == '"') (*col)++; // For closing quote

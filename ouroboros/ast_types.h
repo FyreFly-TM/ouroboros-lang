@@ -53,6 +53,10 @@ typedef struct ASTNode {
     int is_void;             // Flag for void functions
     int is_array;            // Flag for array fields/variables
     int array_size;          // Size of array (if specified)
+    
+    // Access modifiers for object properties
+    char access_modifier[16]; // "public", "private", "static"
+    char* parent_class;      // Parent class name for methods (for visibility checks)
 } ASTNode;
 
 // Function prototypes

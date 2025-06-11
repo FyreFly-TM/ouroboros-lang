@@ -14,6 +14,13 @@ StackFrame* create_stack_frame(const char* name, StackFrame* parent) {
     strncpy(frame->name, name, sizeof(frame->name) - 1);
     frame->name[sizeof(frame->name) - 1] = '\0';
     
+    // Store the function name for debugging / access control
+    strncpy(frame->function_name, name, sizeof(frame->function_name) - 1);
+    frame->function_name[sizeof(frame->function_name) - 1] = '\0';
+    
+    // Initialize return value pointer
+    frame->return_value = NULL;
+    
     frame->parent = parent;
     frame->var_count = 0;
     
@@ -23,6 +30,10 @@ StackFrame* create_stack_frame(const char* name, StackFrame* parent) {
 // Destroy a stack frame and free memory
 void destroy_stack_frame(StackFrame* frame) {
     if (frame) {
+        if (frame->return_value) {
+            free(frame->return_value);
+            frame->return_value = NULL;
+        }
         free(frame);
     }
 }

@@ -1,0 +1,56 @@
+import "graphics_lib";
+
+function draw_rotating_triangle() {
+    opengl_init();
+    opengl_create_context(800, 600, "Rotating Triangle");
+
+    // Create shader program
+    var shader = opengl_create_shader(
+        "#version 330 core\n" +
+        "layout (location = 0) in vec3 aPos;\n" +
+        "uniform float rotation;\n" +
+        "void main() {\n" +
+        "    float c = cos(rotation);\n" +
+        "    float s = sin(rotation);\n" +
+        "    vec3 pos = vec3(aPos.x * c - aPos.y * s, aPos.x * s + aPos.y * c, aPos.z);\n" +
+        "    gl_Position = vec4(pos, 1.0);\n" +
+        "}",
+        "#version 330 core\n" +
+        "out vec4 FragColor;\n" +
+        "void main() {\n" +
+        "    FragColor = vec4(1.0, 0.5, 0.2, 1.0);\n" +
+        "}"
+    );
+
+    // Triangle vertices
+    var vertices = { -0.5, -0.5, 0.0,   0.5, -0.5, 0.0,   0.0, 0.5, 0.0 };
+
+    // Create vertex buffer
+    var vbo = opengl_create_buffer();
+    opengl_bind_buffer(0x8892, vbo); // GL_ARRAY_BUFFER
+    // 9 floats * 4 bytes = 36 bytes
+    opengl_buffer_data(0x8892, 36, vertices, 0x88E4); // GL_STATIC_DRAW
+
+    var rotation = 0.0;
+
+    // Render loop
+    while (opengl_is_context_valid()) {
+        opengl_clear(0.2, 0.3, 0.3, 1.0);
+
+        opengl_use_shader(shader);
+        opengl_set_uniform_float(shader, "rotation", rotation);
+
+        opengl_draw_arrays(4, 0, 3); // GL_TRIANGLES
+
+        rotation = rotation + 0.01;
+
+        opengl_swap_buffers();
+    }
+
+    opengl_destroy_context();
+}
+
+function Start() {
+    draw_rotating_triangle();
+    return 0;
+} 

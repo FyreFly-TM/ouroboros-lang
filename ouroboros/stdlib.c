@@ -2,6 +2,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include "stdlib.h"
+#include "vm.h"
+
+// For minimal build, stub out the GUI and graphics dependencies
+#ifndef MINIMAL_BUILD
 #include "gui.h"
 #include "widget.h"
 #include "network.h"
@@ -10,7 +14,7 @@
 #include "http.h"
 #include "opengl.h"
 #include "vulkan.h"
-#include "vm.h"
+#endif
 
 // Function registry
 typedef struct NativeFunction {
@@ -21,6 +25,197 @@ typedef struct NativeFunction {
 } NativeFunction;
 
 static NativeFunction *functions = NULL;
+
+// For storing function call arguments
+static const char **call_args = NULL;
+static int call_arg_count = 0;
+
+// Stub implementations for minimal build
+#ifdef MINIMAL_BUILD
+// GUI stubs
+void init_gui() {
+    printf("[GUI] GUI initialized (stub for minimal build)\n");
+}
+
+void draw_window(const char *title, int width, int height) {
+    printf("[GUI] Window '%s' drawn [%d x %d] (stub for minimal build)\n", title, width, height);
+}
+
+void draw_label(const char *text) {
+    printf("[GUI] Label: \"%s\" (stub for minimal build)\n", text);
+}
+
+void draw_button(const char *label) {
+    printf("[GUI] Button: [%s] (stub for minimal build)\n", label);
+}
+
+void gui_message_loop() {
+    printf("[GUI] Message loop (stub for minimal build)\n");
+}
+
+// Network stubs
+int connect_to_server(const char *address, int port) {
+    printf("[NETWORK] Connect to %s:%d (stub for minimal build)\n", address, port);
+    return 1;
+}
+
+// HTTP stubs
+char* http_get(const char *url) {
+    printf("[HTTP] GET %s (stub for minimal build)\n", url);
+    return strdup("Stub HTTP response");
+}
+
+// Event stubs
+void register_event(const char *event_name, void (*callback)(void)) {
+    printf("[EVENT] Register event %s (stub for minimal build)\n", event_name);
+}
+
+void trigger_event(const char *event_name) {
+    printf("[EVENT] Trigger event %s (stub for minimal build)\n", event_name);
+}
+
+// Timer stubs
+void set_timeout(void (*callback)(void), int ms) {
+    printf("[TIMER] Set timeout %d ms (stub for minimal build)\n", ms);
+}
+
+// OpenGL stubs
+int opengl_init() {
+    printf("[OPENGL] Init (stub for minimal build)\n");
+    return 1;
+}
+
+int opengl_create_context(int width, int height, const char *title) {
+    printf("[OPENGL] Create context %dx%d '%s' (stub for minimal build)\n", width, height, title);
+    return 1;
+}
+
+void opengl_destroy_context() {
+    printf("[OPENGL] Destroy context (stub for minimal build)\n");
+}
+
+unsigned int opengl_create_shader(const char *vertex_src, const char *fragment_src) {
+    printf("[OPENGL] Create shader (stub for minimal build)\n");
+    return 1;
+}
+
+void opengl_use_shader(unsigned int shader) {
+    printf("[OPENGL] Use shader %u (stub for minimal build)\n", shader);
+}
+
+void opengl_set_uniform_float(unsigned int shader, const char *name, float value) {
+    printf("[OPENGL] Set uniform float %s = %f (stub for minimal build)\n", name, value);
+}
+
+void opengl_set_uniform_vec3(unsigned int shader, const char *name, float x, float y, float z) {
+    printf("[OPENGL] Set uniform vec3 %s = (%f, %f, %f) (stub for minimal build)\n", name, x, y, z);
+}
+
+unsigned int opengl_create_buffer() {
+    printf("[OPENGL] Create buffer (stub for minimal build)\n");
+    return 1;
+}
+
+void opengl_bind_buffer(unsigned int buffer, int target) {
+    printf("[OPENGL] Bind buffer %u to target %d (stub for minimal build)\n", buffer, target);
+}
+
+void opengl_buffer_data(int target, size_t size, const void *data, int usage) {
+    printf("[OPENGL] Buffer data, size %zu (stub for minimal build)\n", size);
+}
+
+unsigned int opengl_create_texture(int width, int height, const void *data, int format) {
+    printf("[OPENGL] Create texture %dx%d (stub for minimal build)\n", width, height);
+    return 1;
+}
+
+void opengl_clear(float r, float g, float b, float a) {
+    printf("[OPENGL] Clear with color (%f, %f, %f, %f) (stub for minimal build)\n", r, g, b, a);
+}
+
+void opengl_draw_arrays(int mode, int first, int count) {
+    printf("[OPENGL] Draw arrays, count %d (stub for minimal build)\n", count);
+}
+
+void opengl_swap_buffers() {
+    printf("[OPENGL] Swap buffers (stub for minimal build)\n");
+}
+
+int opengl_is_context_valid() {
+    printf("[OPENGL] Is context valid (stub for minimal build)\n");
+    return 1;
+}
+
+// Vulkan stubs
+int vulkan_init() {
+    printf("[VULKAN] Init (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_instance(const char *app_name) {
+    printf("[VULKAN] Create instance for '%s' (stub for minimal build)\n", app_name);
+    return 1;
+}
+
+int vulkan_select_physical_device() {
+    printf("[VULKAN] Select physical device (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_logical_device() {
+    printf("[VULKAN] Create logical device (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_surface(void *window, int window_system_type) {
+    printf("[VULKAN] Create surface (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_swapchain(int width, int height) {
+    printf("[VULKAN] Create swapchain %dx%d (stub for minimal build)\n", width, height);
+    return 1;
+}
+
+int vulkan_create_render_pass() {
+    printf("[VULKAN] Create render pass (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_graphics_pipeline(const char *vertex_shader, const char *fragment_shader) {
+    printf("[VULKAN] Create graphics pipeline (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_create_vertex_buffer(void *vertices, size_t size) {
+    printf("[VULKAN] Create vertex buffer, size %zu (stub for minimal build)\n", size);
+    return 1;
+}
+
+int vulkan_create_command_buffers() {
+    printf("[VULKAN] Create command buffers (stub for minimal build)\n");
+    return 1;
+}
+
+int vulkan_draw_frame() {
+    printf("[VULKAN] Draw frame (stub for minimal build)\n");
+    return 1;
+}
+
+void vulkan_cleanup() {
+    printf("[VULKAN] Cleanup (stub for minimal build)\n");
+}
+#endif
+
+void set_call_args(const char **args, int count) {
+    call_args = args;
+    call_arg_count = count;
+    
+    printf("[STDLIB] Set call args with count: %d\n", count);
+    for (int i = 0; i < count; i++) {
+        printf("[STDLIB] Arg %d: %s\n", i, args[i] ? args[i] : "NULL");
+    }
+}
 
 // Function prototypes for wrappers
 void wrapper_print();
@@ -100,22 +295,133 @@ void wrapper_vulkan_create_command_buffers();
 void wrapper_vulkan_draw_frame();
 void wrapper_vulkan_cleanup();
 
-// Global argument storage for function calls
-static const char *call_args[10];
-static int call_arg_count = 0;
+void register_function(const char *name, void (*func_ptr)(void), int arg_count) {
+    NativeFunction *fn = malloc(sizeof(NativeFunction));
+    fn->name = malloc(strlen(name) + 1);
+    strcpy((char*)fn->name, name);
+    fn->func_ptr = func_ptr;
+    fn->arg_count = arg_count;
+    fn->next = functions;
+    functions = fn;
+}
 
-void set_call_args(const char **args, int count) {
-    call_arg_count = count;
-    for (int i = 0; i < count && i < 10; i++) {
-        call_args[i] = args[i];
+void register_stdlib_functions() {
+    printf("[STD] Registering built-in functions...\n");
+    
+    // Register core functions that are always available
+    register_function("print", wrapper_print, 1);
+    register_function("get_input", wrapper_get_input, 1);
+    register_function("to_string", wrapper_to_string, 1);
+    register_function("string_concat", wrapper_string_concat, 2);
+    register_function("string_length", wrapper_string_length, 1);
+    
+    // Register GUI and graphics functions (minimal build has stubs)
+    register_function("init_gui", wrapper_init_gui, 0);
+    register_function("draw_window", wrapper_draw_window, 3);
+    register_function("draw_label", wrapper_draw_label, 1);
+    register_function("draw_button", wrapper_draw_button, 1);
+    register_function("connect_to_server", wrapper_connect_to_server, 2);
+    register_function("register_event", wrapper_register_event, 2);
+    register_function("trigger_event", wrapper_trigger_event, 1);
+    register_function("set_timeout", wrapper_set_timeout, 2);
+    register_function("http_get", wrapper_http_get, 1);
+    register_function("gui_message_loop", wrapper_gui_message_loop, 0);
+    
+    // Register OpenGL functions
+    register_function("opengl_init", wrapper_opengl_init, 0);
+    register_function("opengl_create_context", wrapper_opengl_create_context, 3);
+    register_function("opengl_destroy_context", wrapper_opengl_destroy_context, 0);
+    register_function("opengl_create_shader", wrapper_opengl_create_shader, 2);
+    register_function("opengl_use_shader", wrapper_opengl_use_shader, 1);
+    register_function("opengl_set_uniform_float", wrapper_opengl_set_uniform_float, 3);
+    register_function("opengl_set_uniform_vec3", wrapper_opengl_set_uniform_vec3, 5);
+    register_function("opengl_create_buffer", wrapper_opengl_create_buffer, 0);
+    register_function("opengl_bind_buffer", wrapper_opengl_bind_buffer, 2);
+    register_function("opengl_buffer_data", wrapper_opengl_buffer_data, 4);
+    register_function("opengl_create_texture", wrapper_opengl_create_texture, 4);
+    register_function("opengl_clear", wrapper_opengl_clear, 4);
+    register_function("opengl_draw_arrays", wrapper_opengl_draw_arrays, 3);
+    register_function("opengl_swap_buffers", wrapper_opengl_swap_buffers, 0);
+    register_function("opengl_is_context_valid", wrapper_opengl_is_context_valid, 0);
+    
+    // Register Vulkan functions
+    register_function("vulkan_init", wrapper_vulkan_init, 0);
+    register_function("vulkan_create_instance", wrapper_vulkan_create_instance, 1);
+    register_function("vulkan_select_physical_device", wrapper_vulkan_select_physical_device, 0);
+    register_function("vulkan_create_logical_device", wrapper_vulkan_create_logical_device, 0);
+    register_function("vulkan_create_surface", wrapper_vulkan_create_surface, 2);
+    register_function("vulkan_create_swapchain", wrapper_vulkan_create_swapchain, 2);
+    register_function("vulkan_create_render_pass", wrapper_vulkan_create_render_pass, 0);
+    register_function("vulkan_create_graphics_pipeline", wrapper_vulkan_create_graphics_pipeline, 2);
+    register_function("vulkan_create_vertex_buffer", wrapper_vulkan_create_vertex_buffer, 2);
+    register_function("vulkan_create_command_buffers", wrapper_vulkan_create_command_buffers, 0);
+    register_function("vulkan_draw_frame", wrapper_vulkan_draw_frame, 0);
+    register_function("vulkan_cleanup", wrapper_vulkan_cleanup, 0);
+    
+#ifndef MINIMAL_BUILD
+    // Register voxel and other advanced functions only if not a minimal build
+    register_function("voxel_engine_create", wrapper_voxel_engine_create, 0);
+    register_function("voxel_create_world", wrapper_voxel_create_world, 3);
+    register_function("voxel_set_camera", wrapper_voxel_set_camera, 6);
+    register_function("voxel_render_frame", wrapper_voxel_render_frame, 0);
+    register_function("voxel_set_block", wrapper_voxel_set_block, 4);
+    register_function("voxel_get_block", wrapper_voxel_get_block, 3);
+    register_function("voxel_create_sphere", wrapper_voxel_create_sphere, 5);
+    register_function("voxel_raycast", wrapper_voxel_raycast, 6);
+    register_function("voxel_enable_physics", wrapper_voxel_enable_physics, 0);
+    register_function("voxel_set_lighting", wrapper_voxel_set_lighting, 6);
+    register_function("voxel_generate_terrain", wrapper_voxel_generate_terrain, 4);
+    register_function("voxel_create_material", wrapper_voxel_create_material, 5);
+    register_function("voxel_performance_stats", wrapper_voxel_performance_stats, 0);
+    register_function("voxel_save_world", wrapper_voxel_save_world, 1);
+    register_function("voxel_load_world", wrapper_voxel_load_world, 1);
+    register_function("ml_engine_create", wrapper_ml_engine_create, 0);
+    register_function("ml_train_lod_model", wrapper_ml_train_lod_model, 3);
+    register_function("ml_predict_performance", wrapper_ml_predict_performance, 4);
+    register_function("gpu_renderer_create", wrapper_gpu_renderer_create, 0);
+    register_function("gpu_enable_frustum_culling", wrapper_gpu_enable_frustum_culling, 0);
+    register_function("gpu_optimize_performance", wrapper_gpu_optimize_performance, 2);
+    register_function("gpu_render_infinite_world", wrapper_gpu_render_infinite_world, 1);
+    register_function("demo_lightning_fast", wrapper_demo_lightning_fast, 0);
+    register_function("demo_show_capabilities", wrapper_demo_show_capabilities, 0);
+    register_function("demo_benchmark_results", wrapper_demo_benchmark_results, 0);
+    register_function("voxel_create_world_with_progress", wrapper_voxel_create_world_with_progress, 3);
+    register_function("voxel_generate_terrain_with_progress", wrapper_voxel_generate_terrain_with_progress, 4);
+    register_function("lighting_setup_with_progress", wrapper_lighting_setup_with_progress, 6);
+    register_function("gpu_systems_init_with_progress", wrapper_gpu_systems_init_with_progress, 0);
+    register_function("loading_animation", wrapper_loading_animation, 1);
+#endif
+    
+    printf("[STD] Built-in functions registered.\n");
+}
+
+int call_builtin_function(const char *name, const char **args, int arg_count) {
+    printf("[STDLIB] Looking for built-in function: %s with %d args\n", name, arg_count);
+    
+    NativeFunction *fn = functions;
+    while (fn) {
+        printf("[STDLIB] Checking function: %s\n", fn->name);
+        if (strcmp(fn->name, name) == 0) {
+            printf("[STDLIB] Found built-in function: %s\n", name);
+            set_call_args(args, arg_count);
+            fn->func_ptr();
+            return 1; // Success
+        }
+        fn = fn->next;
     }
+    
+    printf("[STDLIB] Built-in function not found: %s\n", name);
+    return 0; // Function not found
 }
 
 // Print function wrapper
 void wrapper_print() {
+    printf("[PRINT] Print called with %d arguments\n", call_arg_count);
     if (call_arg_count >= 1) {
         // Just print the message to stdout
         printf("%s\n", call_args[0]);
+    } else {
+        printf("[PRINT] No arguments provided\n");
     }
 }
 
@@ -799,9 +1105,19 @@ void wrapper_opengl_create_buffer() {
 
 void wrapper_opengl_bind_buffer() {
     if (call_arg_count >= 2) {
-        unsigned int buffer = (unsigned int)atoi(call_args[0]);
-        int target = atoi(call_args[1]);
-        opengl_bind_buffer(buffer, target);
+        // Use strtol with base 0 so it understands 0xNNNN literals.
+        unsigned long first = strtoul(call_args[0], NULL, 0);
+        unsigned long second = strtoul(call_args[1], NULL, 0);
+
+        // Heuristic: OpenGL targets are small (e.g. 0x8892) whereas buffer IDs are typically sequential integers starting at 1.
+        // If the first argument looks like a well-known GL enum, treat it as target.
+        if (first >= 0x8000) {
+            // Signature: target, buffer
+            opengl_bind_buffer((unsigned int)second, (int)first);
+        } else {
+            // Signature: buffer, target
+            opengl_bind_buffer((unsigned int)first, (int)second);
+        }
     }
 }
 
@@ -884,7 +1200,7 @@ void wrapper_vulkan_create_logical_device() {
 
 void wrapper_vulkan_create_surface() {
     if (call_arg_count >= 2) {
-        void *window_handle = (void *)atol(call_args[0]); // Simplified
+        void *window_handle = (void *)(uintptr_t)strtoull(call_args[0], NULL, 10); // Use 64-bit safe conversion
         int window_system = atoi(call_args[1]);
         int result = vulkan_create_surface(window_handle, window_system);
         printf("Vulkan surface creation: %s\n", result ? "success" : "failed");
@@ -938,116 +1254,4 @@ void wrapper_vulkan_draw_frame() {
 
 void wrapper_vulkan_cleanup() {
     vulkan_cleanup();
-}
-
-void register_function(const char *name, void (*func_ptr)(void), int arg_count) {
-    NativeFunction *fn = malloc(sizeof(NativeFunction));
-    fn->name = malloc(strlen(name) + 1);
-    strcpy((char*)fn->name, name);
-    fn->func_ptr = func_ptr;
-    fn->arg_count = arg_count;
-    fn->next = functions;
-    functions = fn;
-}
-
-void register_stdlib_functions() {
-    printf("[STD] Registering built-in functions...\n");
-    
-    register_function("print", wrapper_print, 1);
-    register_function("get_input", wrapper_get_input, 1);
-    register_function("init_gui", wrapper_init_gui, 0);
-    register_function("draw_window", wrapper_draw_window, 3);
-    register_function("draw_label", wrapper_draw_label, 1);
-    register_function("draw_button", wrapper_draw_button, 1);
-    register_function("connect_to_server", wrapper_connect_to_server, 2);
-    register_function("register_event", wrapper_register_event, 2);
-    register_function("trigger_event", wrapper_trigger_event, 1);
-    register_function("set_timeout", wrapper_set_timeout, 2);
-    register_function("http_get", wrapper_http_get, 1);
-    register_function("gui_message_loop", wrapper_gui_message_loop, 0);
-    register_function("voxel_engine_create", wrapper_voxel_engine_create, 0);
-    register_function("voxel_create_world", wrapper_voxel_create_world, 3);
-    register_function("voxel_set_camera", wrapper_voxel_set_camera, 6);
-    register_function("voxel_render_frame", wrapper_voxel_render_frame, 0);
-    register_function("voxel_set_block", wrapper_voxel_set_block, 4);
-    register_function("voxel_get_block", wrapper_voxel_get_block, 3);
-    register_function("voxel_create_sphere", wrapper_voxel_create_sphere, 5);
-    register_function("voxel_raycast", wrapper_voxel_raycast, 6);
-    register_function("voxel_enable_physics", wrapper_voxel_enable_physics, 0);
-    register_function("voxel_set_lighting", wrapper_voxel_set_lighting, 6);
-    register_function("voxel_generate_terrain", wrapper_voxel_generate_terrain, 4);
-    register_function("voxel_create_material", wrapper_voxel_create_material, 5);
-    register_function("voxel_performance_stats", wrapper_voxel_performance_stats, 0);
-    register_function("voxel_save_world", wrapper_voxel_save_world, 1);
-    register_function("voxel_load_world", wrapper_voxel_load_world, 1);
-    register_function("ml_engine_create", wrapper_ml_engine_create, 0);
-    register_function("ml_train_lod_model", wrapper_ml_train_lod_model, 3);
-    register_function("ml_predict_performance", wrapper_ml_predict_performance, 4);
-    register_function("gpu_renderer_create", wrapper_gpu_renderer_create, 0);
-    register_function("gpu_enable_frustum_culling", wrapper_gpu_enable_frustum_culling, 0);
-    register_function("gpu_optimize_performance", wrapper_gpu_optimize_performance, 2);
-    register_function("gpu_render_infinite_world", wrapper_gpu_render_infinite_world, 1);
-    register_function("demo_lightning_fast", wrapper_demo_lightning_fast, 0);
-    register_function("demo_show_capabilities", wrapper_demo_show_capabilities, 0);
-    register_function("demo_benchmark_results", wrapper_demo_benchmark_results, 0);
-    register_function("voxel_create_world_with_progress", wrapper_voxel_create_world_with_progress, 3);
-    register_function("voxel_generate_terrain_with_progress", wrapper_voxel_generate_terrain_with_progress, 4);
-    register_function("lighting_setup_with_progress", wrapper_lighting_setup_with_progress, 6);
-    register_function("gpu_systems_init_with_progress", wrapper_gpu_systems_init_with_progress, 0);
-    register_function("loading_animation", wrapper_loading_animation, 1);
-    register_function("to_string", wrapper_to_string, 1);
-    register_function("string_concat", wrapper_string_concat, 2);
-    register_function("string_length", wrapper_string_length, 1);
-    
-    // Register OpenGL functions
-    register_function("opengl_init", wrapper_opengl_init, 0);
-    register_function("opengl_create_context", wrapper_opengl_create_context, 3);
-    register_function("opengl_destroy_context", wrapper_opengl_destroy_context, 0);
-    register_function("opengl_create_shader", wrapper_opengl_create_shader, 2);
-    register_function("opengl_use_shader", wrapper_opengl_use_shader, 1);
-    register_function("opengl_set_uniform_float", wrapper_opengl_set_uniform_float, 3);
-    register_function("opengl_set_uniform_vec3", wrapper_opengl_set_uniform_vec3, 5);
-    register_function("opengl_create_buffer", wrapper_opengl_create_buffer, 0);
-    register_function("opengl_bind_buffer", wrapper_opengl_bind_buffer, 2);
-    register_function("opengl_buffer_data", wrapper_opengl_buffer_data, 4);
-    register_function("opengl_create_texture", wrapper_opengl_create_texture, 4);
-    register_function("opengl_clear", wrapper_opengl_clear, 4);
-    register_function("opengl_draw_arrays", wrapper_opengl_draw_arrays, 3);
-    register_function("opengl_swap_buffers", wrapper_opengl_swap_buffers, 0);
-    register_function("opengl_is_context_valid", wrapper_opengl_is_context_valid, 0);
-    
-    // Register Vulkan functions
-    register_function("vulkan_init", wrapper_vulkan_init, 0);
-    register_function("vulkan_create_instance", wrapper_vulkan_create_instance, 1);
-    register_function("vulkan_select_physical_device", wrapper_vulkan_select_physical_device, 0);
-    register_function("vulkan_create_logical_device", wrapper_vulkan_create_logical_device, 0);
-    register_function("vulkan_create_surface", wrapper_vulkan_create_surface, 2);
-    register_function("vulkan_create_swapchain", wrapper_vulkan_create_swapchain, 2);
-    register_function("vulkan_create_render_pass", wrapper_vulkan_create_render_pass, 0);
-    register_function("vulkan_create_graphics_pipeline", wrapper_vulkan_create_graphics_pipeline, 2);
-    register_function("vulkan_create_vertex_buffer", wrapper_vulkan_create_vertex_buffer, 2);
-    register_function("vulkan_create_command_buffers", wrapper_vulkan_create_command_buffers, 0);
-    register_function("vulkan_draw_frame", wrapper_vulkan_draw_frame, 0);
-    register_function("vulkan_cleanup", wrapper_vulkan_cleanup, 0);
-    
-    printf("[STD] Built-in functions registered.\n");
-}
-
-int call_builtin_function(const char *name, const char **args, int arg_count) {
-    printf("[STDLIB] Looking for built-in function: %s with %d args\n", name, arg_count);
-    
-    NativeFunction *fn = functions;
-    while (fn) {
-        printf("[STDLIB] Checking function: %s\n", fn->name);
-        if (strcmp(fn->name, name) == 0) {
-            printf("[STDLIB] Found built-in function: %s\n", name);
-            set_call_args(args, arg_count);
-            fn->func_ptr();
-            return 1; // Success
-        }
-        fn = fn->next;
-    }
-    
-    printf("[STDLIB] Built-in function not found: %s\n", name);
-    return 0; // Function not found
 }

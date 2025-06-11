@@ -1,0 +1,103 @@
+class Vector {
+    // Constructor
+    function init(x_val, y_val, z_val) {
+        this.x = x_val;
+        this.y = y_val;
+        this.z = z_val;
+    }
+
+    // Method to add two vectors
+    function add(other_vector) {
+        return new Vector(this.x + other_vector.x, this.y + other_vector.y, this.z + other_vector.z);
+    }
+
+    // Method to subtract two vectors
+    function subtract(other_vector) {
+        return new Vector(this.x - other_vector.x, this.y - other_vector.y, this.z - other_vector.z);
+    }
+
+    // Method for dot product
+    function dot_product(other_vector) {
+        return (this.x * other_vector.x) + (this.y * other_vector.y) + (this.z * other_vector.z);
+    }
+
+    // Method to get a string representation
+    function to_string() {
+        return "Vector(" + this.x + ", " + this.y + ", " + this.z + ")";
+    }
+}
+
+// ---------------- Vector2 ----------------
+class Vector2 {
+    function init(x_val, y_val) {
+        this.x = x_val;
+        this.y = y_val;
+    }
+
+    function add(other) {
+        return new Vector2(this.x + other.x, this.y + other.y);
+    }
+
+    function subtract(other) {
+        return new Vector2(this.x - other.x, this.y - other.y);
+    }
+
+    function dot_product(other) {
+        return (this.x * other.x) + (this.y * other.y);
+    }
+
+    function to_string() {
+        return "Vector2(" + this.x + ", " + this.y + ")";
+    }
+}
+
+// ---------------- Vector3 ----------------
+class Vector3 {
+    function init(x_val, y_val, z_val) {
+        this.x = x_val;
+        this.y = y_val;
+        this.z = z_val;
+    }
+
+    function add(other) {
+        return new Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+
+    function subtract(other) {
+        return new Vector3(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+
+    function dot_product(other) {
+        return (this.x * other.x) + (this.y * other.y) + (this.z * other.z);
+    }
+
+    function to_string() {
+        return "Vector3(" + this.x + ", " + this.y + ", " + this.z + ")";
+    }
+}
+
+// ---------------- Vector4 ----------------
+class Vector4 {
+    function init(x_val, y_val, z_val, w_val) {
+        this.x = x_val;
+        this.y = y_val;
+        this.z = z_val;
+        this.w = w_val;
+    }
+
+    function add(other) {
+        return new Vector4(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
+    }
+
+    function subtract(other) {
+        return new Vector4(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
+    }
+
+    function dot_product(other) {
+        return (this.x * other.x) + (this.y * other.y) + (this.z * other.z) + (this.w * other.w);
+    }
+
+    function to_string() {
+        return "Vector4(" + this.x + ", " + this.y + ", " + this.z + ", " + this.w + ")";
+    }
+} 

@@ -15,6 +15,7 @@ static int g_width = 800;
 static int g_height = 600;
 static MSG g_msg = {0};
 static int g_window_closed = 0;
+static int g_simulated_frames = 0; // headless escape
 
 // Shader variables
 static unsigned int g_current_shader = 0;
@@ -103,6 +104,12 @@ void opengl_create_context(int width, int height, const char* title) {
     printf("[OPENGL] Creating OpenGL rendering context\n");
     printf("[OPENGL] Making context current\n");
     
+    // Stub: mark the context as 'created' even though we don't create a real HGLRC
+    // so that opengl_is_context_valid() returns true and the user render loop runs.
+    if (!g_hglrc) {
+        g_hglrc = (HGLRC)1; // non-NULL sentinel value
+    }
+    
     // Set viewport
     printf("[OPENGL] Setting viewport: 0, 0, %d, %d\n", width, height);
     
@@ -134,7 +141,17 @@ void opengl_destroy_context() {
 }
 
 int opengl_is_context_valid() {
-    return g_hglrc != NULL && !g_window_closed;
+    // Pump the Windows message queue so the demo window can be closed.
+    while (PeekMessage(&g_msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&g_msg);
+        DispatchMessage(&g_msg);
+    }
+
+    if (!g_window_closed && g_simulated_frames < 600) {
+        g_simulated_frames++;
+        return 1;
+    }
+    return 0;
 }
 
 unsigned int opengl_create_shader(const char* vertex_src, const char* fragment_src) {

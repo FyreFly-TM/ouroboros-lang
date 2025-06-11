@@ -1,0 +1,194 @@
+[STD] Registering built-in functions...
+[STD] Built-in functions registered.
+Compiling file: C:\Users\jacob\Downloads\OuroMath\OuroMath\main.ouro
+==== Lexical Analysis ====
+Token: Type=1, Text='import', Line=2, Col=1
+Token: Type=3, Text='graphics_lib', Line=2, Col=8
+Token: Type=1, Text='function', Line=4, Col=1
+Token: Type=0, Text='draw_rotating_triangle', Line=4, Col=10
+Token: Type=6, Text='(', Line=4, Col=32
+Token: Type=6, Text=')', Line=4, Col=33
+Token: Type=6, Text='{', Line=4, Col=35
+Token: Type=0, Text='opengl_init', Line=5, Col=5
+Token: Type=6, Text='(', Line=5, Col=16
+Token: Type=6, Text=')', Line=5, Col=17
+Token: Type=6, Text=';', Line=5, Col=18
+Token: Type=0, Text='opengl_create_context', Line=6, Col=5
+Token: Type=6, Text='(', Line=6, Col=26
+Token: Type=2, Text='800', Line=6, Col=27
+Token: Type=6, Text=',', Line=6, Col=30
+Token: Type=2, Text='600', Line=6, Col=32
+Token: Type=6, Text=',', Line=6, Col=35
+Token: Type=3, Text='Rotating Triangle', Line=6, Col=37
+Token: Type=6, Text=')', Line=6, Col=56
+Token: Type=6, Text=';', Line=6, Col=57
+Token: Type=1, Text='int', Line=9, Col=5
+Token: Type=0, Text='shader', Line=9, Col=9
+Token: Type=5, Text='=', Line=9, Col=16
+Token: Type=0, Text='opengl_create_shader', Line=9, Col=18
+Token: Type=6, Text='(', Line=9, Col=38
+Token: Type=3, Text='#version 330 core
+', Line=10, Col=9
+Token: Type=5, Text='+', Line=10, Col=31
+Token: Type=3, Text='layout (location = 0) in vec3 aPos;
+', Line=11, Col=9
+Token: Type=5, Text='+', Line=11, Col=49
+Token: Type=3, Text='uniform float rotation;
+', Line=12, Col=9
+Token: Type=5, Text='+', Line=12, Col=37
+Token: Type=3, Text='void main() {
+', Line=13, Col=9
+Token: Type=5, Text='+', Line=13, Col=27
+Token: Type=3, Text='    float c = cos(rotation);
+', Line=14, Col=9
+Token: Type=5, Text='+', Line=14, Col=42
+Token: Type=3, Text='    float s = sin(rotation);
+', Line=15, Col=9
+Token: Type=5, Text='+', Line=15, Col=42
+Token: Type=3, Text='    vec3 pos = vec3(aPos.x * c - aPos.y * s, aPos.x * s + aPos.y * c, aPos.z);
+', Line=16, Col=9
+Token: Type=5, Text='+', Line=16, Col=92
+Token: Type=3, Text='    gl_Position = vec4(pos, 1.0);
+', Line=17, Col=9
+Token: Type=5, Text='+', Line=17, Col=47
+Token: Type=3, Text='}', Line=18, Col=9
+Token: Type=6, Text=',', Line=18, Col=12
+Token: Type=3, Text='#version 330 core
+', Line=19, Col=9
+Token: Type=5, Text='+', Line=19, Col=31
+Token: Type=3, Text='out vec4 FragColor;
+', Line=20, Col=9
+Token: Type=5, Text='+', Line=20, Col=33
+Token: Type=3, Text='void main() {
+', Line=21, Col=9
+Token: Type=5, Text='+', Line=21, Col=27
+Token: Type=3, Text='    FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+', Line=22, Col=9
+Token: Type=5, Text='+', Line=22, Col=55
+Token: Type=3, Text='}', Line=23, Col=9
+Token: Type=6, Text=')', Line=24, Col=5
+Token: Type=6, Text=';', Line=24, Col=6
+Token: Type=1, Text='float', Line=27, Col=5
+Token: Type=0, Text='vertices', Line=27, Col=11
+Token: Type=6, Text='[', Line=27, Col=19
+Token: Type=6, Text=']', Line=27, Col=20
+Token: Type=5, Text='=', Line=27, Col=22
+Token: Type=6, Text='{', Line=27, Col=24
+Token: Type=5, Text='-', Line=28, Col=9
+Token: Type=2, Text='0.5', Line=28, Col=10
+Token: Type=6, Text=',', Line=28, Col=13
+Token: Type=5, Text='-', Line=28, Col=15
+Token: Type=2, Text='0.5', Line=28, Col=16
+Token: Type=6, Text=',', Line=28, Col=19
+Token: Type=2, Text='0.0', Line=28, Col=21
+Token: Type=6, Text=',', Line=28, Col=24
+Token: Type=2, Text='0.5', Line=29, Col=10
+Token: Type=6, Text=',', Line=29, Col=13
+Token: Type=5, Text='-', Line=29, Col=15
+Token: Type=2, Text='0.5', Line=29, Col=16
+Token: Type=6, Text=',', Line=29, Col=19
+Token: Type=2, Text='0.0', Line=29, Col=21
+Token: Type=6, Text=',', Line=29, Col=24
+Token: Type=2, Text='0.0', Line=30, Col=10
+Token: Type=6, Text=',', Line=30, Col=13
+Token: Type=2, Text='0.5', Line=30, Col=16
+Token: Type=6, Text=',', Line=30, Col=19
+Token: Type=2, Text='0.0', Line=30, Col=21
+Token: Type=6, Text='}', Line=31, Col=5
+Token: Type=6, Text=';', Line=31, Col=6
+Token: Type=1, Text='int', Line=34, Col=5
+Token: Type=0, Text='vbo', Line=34, Col=9
+Token: Type=5, Text='=', Line=34, Col=13
+Token: Type=0, Text='opengl_create_buffer', Line=34, Col=15
+Token: Type=6, Text='(', Line=34, Col=35
+Token: Type=6, Text=')', Line=34, Col=36
+Token: Type=6, Text=';', Line=34, Col=37
+Token: Type=0, Text='opengl_bind_buffer', Line=35, Col=5
+Token: Type=6, Text='(', Line=35, Col=23
+Token: Type=2, Text='0', Line=35, Col=24
+Token: Type=0, Text='x8892', Line=35, Col=25
+Token: Type=6, Text=',', Line=35, Col=30
+Token: Type=0, Text='vbo', Line=35, Col=32
+Token: Type=6, Text=')', Line=35, Col=35
+Token: Type=6, Text=';', Line=35, Col=36
+Token: Type=0, Text='opengl_buffer_data', Line=36, Col=5
+Token: Type=6, Text='(', Line=36, Col=23
+Token: Type=2, Text='0', Line=36, Col=24
+Token: Type=0, Text='x8892', Line=36, Col=25
+Token: Type=6, Text=',', Line=36, Col=30
+Token: Type=0, Text='sizeof', Line=36, Col=32
+Token: Type=6, Text='(', Line=36, Col=38
+Token: Type=0, Text='vertices', Line=36, Col=39
+Token: Type=6, Text=')', Line=36, Col=47
+Token: Type=6, Text=',', Line=36, Col=48
+Token: Type=0, Text='vertices', Line=36, Col=50
+Token: Type=6, Text=',', Line=36, Col=58
+Token: Type=2, Text='0', Line=36, Col=60
+Token: Type=0, Text='x88E4', Line=36, Col=61
+Token: Type=6, Text=')', Line=36, Col=66
+Token: Type=6, Text=';', Line=36, Col=67
+Token: Type=1, Text='float', Line=38, Col=5
+Token: Type=0, Text='rotation', Line=38, Col=11
+Token: Type=5, Text='=', Line=38, Col=20
+Token: Type=2, Text='0.0', Line=38, Col=22
+Token: Type=6, Text=';', Line=38, Col=25
+Token: Type=1, Text='while', Line=41, Col=5
+Token: Type=6, Text='(', Line=41, Col=11
+Token: Type=0, Text='opengl_is_context_valid', Line=41, Col=12
+Token: Type=6, Text='(', Line=41, Col=35
+Token: Type=6, Text=')', Line=41, Col=36
+Token: Type=6, Text=')', Line=41, Col=37
+Token: Type=6, Text='{', Line=41, Col=39
+Token: Type=0, Text='opengl_clear', Line=43, Col=9
+Token: Type=6, Text='(', Line=43, Col=21
+Token: Type=2, Text='0.2', Line=43, Col=22
+Token: Type=6, Text=',', Line=43, Col=25
+Token: Type=2, Text='0.3', Line=43, Col=27
+Token: Type=6, Text=',', Line=43, Col=30
+Token: Type=2, Text='0.3', Line=43, Col=32
+Token: Type=6, Text=',', Line=43, Col=35
+Token: Type=2, Text='1.0', Line=43, Col=37
+Token: Type=6, Text=')', Line=43, Col=40
+Token: Type=6, Text=';', Line=43, Col=41
+Token: Type=0, Text='opengl_use_shader', Line=46, Col=9
+Token: Type=6, Text='(', Line=46, Col=26
+Token: Type=0, Text='shader', Line=46, Col=27
+Token: Type=6, Text=')', Line=46, Col=33
+Token: Type=6, Text=';', Line=46, Col=34
+Token: Type=0, Text='opengl_set_uniform_float', Line=47, Col=9
+Token: Type=6, Text='(', Line=47, Col=33
+Token: Type=0, Text='shader', Line=47, Col=34
+Token: Type=6, Text=',', Line=47, Col=40
+Token: Type=3, Text='rotation', Line=47, Col=42
+Token: Type=6, Text=',', Line=47, Col=52
+Token: Type=0, Text='rotation', Line=47, Col=54
+Token: Type=6, Text=')', Line=47, Col=62
+Token: Type=6, Text=';', Line=47, Col=63
+Token: Type=0, Text='opengl_draw_arrays', Line=50, Col=9
+Token: Type=6, Text='(', Line=50, Col=27
+Token: Type=2, Text='4', Line=50, Col=28
+Token: Type=6, Text=',', Line=50, Col=29
+Token: Type=2, Text='0', Line=50, Col=31
+Token: Type=6, Text=',', Line=50, Col=32
+Token: Type=2, Text='3', Line=50, Col=34
+Token: Type=6, Text=')', Line=50, Col=35
+Token: Type=6, Text=';', Line=50, Col=36
+Token: Type=0, Text='rotation', Line=53, Col=9
+Token: Type=5, Text='=', Line=53, Col=18
+Token: Type=0, Text='rotation', Line=53, Col=20
+Token: Type=5, Text='+', Line=53, Col=29
+Token: Type=2, Text='0.01', Line=53, Col=31
+Token: Type=6, Text=';', Line=53, Col=35
+Token: Type=0, Text='opengl_swap_buffers', Line=56, Col=9
+Token: Type=6, Text='(', Line=56, Col=28
+Token: Type=6, Text=')', Line=56, Col=29
+Token: Type=6, Text=';', Line=56, Col=30
+Token: Type=6, Text='}', Line=57, Col=5
+Token: Type=0, Text='opengl_destroy_context', Line=59, Col=5
+Token: Type=6, Text='(', Line=59, Col=27
+Token: Type=6, Text=')', Line=59, Col=28
+Token: Type=6, Text=';', Line=59, Col=29
+Token: Type=6, Text='}', Line=60, Col=1
+Token: Type=1, Text='function', Line=62, Col=1
+Token: Type=0, Text='Start', Line=62, Col=10
+Token: Type=6, Text='(', Line=62, Col=15

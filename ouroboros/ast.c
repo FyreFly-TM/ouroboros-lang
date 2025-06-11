@@ -3,27 +3,34 @@
 #include <string.h>
 #include "ast_types.h"
 
-// Function to create a new AST node
+// Create a new AST node
 ASTNode* create_node(ASTNodeType type, const char* value) {
     ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
     if (!node) {
-        fprintf(stderr, "Memory allocation failed\n");
+        fprintf(stderr, "Error: Failed to allocate memory for AST node\n");
         return NULL;
     }
     
     node->type = type;
-    strncpy(node->value, value ? value : "", sizeof(node->value) - 1);
-    node->value[sizeof(node->value) - 1] = '\0';
-    
-    memset(node->data_type, 0, sizeof(node->data_type));
-    memset(node->generic_type, 0, sizeof(node->generic_type));
-    node->is_void = 0;
-    node->is_array = 0;
-    node->array_size = 0;
+    if (value) {
+        strncpy(node->value, value, sizeof(node->value) - 1);
+        node->value[sizeof(node->value) - 1] = '\0';
+    } else {
+        node->value[0] = '\0';
+    }
     
     node->left = NULL;
     node->right = NULL;
     node->next = NULL;
+    
+    // Initialize other fields
+    node->data_type[0] = '\0';
+    node->generic_type[0] = '\0';
+    node->is_void = 0;
+    node->is_array = 0;
+    node->array_size = 0;
+    node->access_modifier[0] = '\0';
+    node->parent_class = NULL;
     
     return node;
 }
@@ -35,8 +42,8 @@ static void print_indent(int indent) {
     }
 }
 
-// Convert node type to string representation
-const char *node_type_to_string(ASTNodeType type) {
+// Convert node type to string for debug printing
+const char* node_type_to_string(ASTNodeType type) {
     switch (type) {
         case AST_PROGRAM: return "Program";
         case AST_FUNCTION: return "Function";
@@ -76,8 +83,8 @@ const char *node_type_to_string(ASTNodeType type) {
     }
 }
 
-// Function to print AST
-void print_ast(ASTNode *node, int indent) {
+// Print the AST (for debugging)
+void print_ast(ASTNode* node, int indent) {
     if (!node) return;
     
     print_indent(indent);
@@ -95,6 +102,10 @@ void print_ast(ASTNode *node, int indent) {
             printf(", void");
         }
         
+        if (node->is_array) {
+            printf(", array");
+        }
+        
         printf(")");
     } else if (node->generic_type[0] != '\0') {
         printf(" (Generic: %s)", node->generic_type);
@@ -102,8 +113,14 @@ void print_ast(ASTNode *node, int indent) {
         printf(" (void)");
     }
     
+    // Print access modifier if present
+    if (node->access_modifier[0] != '\0') {
+        printf(" [%s]", node->access_modifier);
+    }
+    
     printf("\n");
     
+    // Recursively print children
     if (node->left) {
         print_indent(indent);
         printf("Left:\n");
@@ -123,25 +140,21 @@ void print_ast(ASTNode *node, int indent) {
     }
 }
 
-// Function to free AST
-void free_ast(ASTNode *node) {
+// Free the AST
+void free_ast(ASTNode* node) {
     if (!node) return;
     
-    // Free left subtree
-    if (node->left) {
-        free_ast(node->left);
+    // Free children first
+    free_ast(node->left);
+    free_ast(node->right);
+    free_ast(node->next);
+    
+    // Free parent class name if allocated
+    if (node->parent_class) {
+        free(node->parent_class);
+        node->parent_class = NULL;
     }
     
-    // Free right subtree
-    if (node->right) {
-        free_ast(node->right);
-    }
-    
-    // Free next node
-    if (node->next) {
-        free_ast(node->next);
-    }
-    
-    // Free the node itself
+    // Free this node
     free(node);
-}
+} 

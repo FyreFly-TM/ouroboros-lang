@@ -4,11 +4,12 @@ LDFLAGS = -lm
 
 # For Windows with MinGW
 ifeq ($(OS),Windows_NT)
-    LDFLAGS = -lgdi32 -lm
+    LDFLAGS = -lgdi32 -lopengl32 -lm
 endif
 
 # Source files
 SRC_FILES = main.c lexer.c parser.c ast.c semantic.c ir.c eval.c vm.c runtime.c \
+           stack.c symbol.c \
            stdlib.c class.c network.c event.c timer.c http.c widget.c gui.c \
            graphics.c method.c instance.c module.c optimize.c concurrency.c \
            opengl.c vulkan.c
@@ -30,7 +31,7 @@ $(OUROBOROS): $(OBJ_FILES)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	del $(OUROBOROS) *.o
+	del /Q *.o $(OUROBOROS) 2>nul || true
 
 run: $(OUROBOROS)
 	./$(OUROBOROS)

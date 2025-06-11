@@ -1,0 +1,47 @@
+// Simple test for access modifiers
+
+class SimpleTest {
+    function SimpleTest() {
+        this.publicProp = "public value";
+        private this.privateProp = "private value";
+        static this.staticProp = "static value";
+    }
+    
+    function getPrivate() {
+        return this.privateProp;
+    }
+    
+    private function privateMethod() {
+        return "from private method";
+    }
+    
+    function callPrivate() {
+        return this.privateMethod();
+    }
+}
+
+function main() {
+    print("=== Simple Access Modifier Test ===");
+    
+    var obj = new SimpleTest();
+    
+    // Public property should be accessible
+    print("Public property: " + obj.publicProp);
+    
+    // Private property should not be accessible
+    print("Private property (should fail): " + obj.privateProp);
+    
+    // Private property should be accessible through a public method
+    print("Private property via method: " + obj.getPrivate());
+    
+    // Static property should be accessible through class
+    print("Static property via class: " + SimpleTest.staticProp);
+    
+    // Private method should not be callable directly
+    print("Private method (should fail): " + obj.privateMethod());
+    
+    // Private method should be callable through public method
+    print("Private method via public method: " + obj.callPrivate());
+    
+    print("=== Test Complete ===");
+} 

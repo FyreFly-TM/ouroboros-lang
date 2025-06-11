@@ -1017,6 +1017,176 @@ function main() {
 }</code></pre>
         </section>
 
+        <!-- ───────────────────────────────────────────────
+             Comprehensive Language Examples (Cheat-Sheet)
+             Added 2025-06-11
+             Each sub-section includes a miniature, runnable snippet
+             demonstrating the feature in isolation together with
+             inline comments so newcomers can copy-paste and learn.
+        ─────────────────────────────────────────────── -->
+        <section id="language-cheatsheet" class="section">
+            <h2><i class="fas fa-lightbulb"></i> Ouroboros: Everything by Example</h2>
+            <p>
+                This page is a quick, example-driven tour of <strong>EVERY core feature</strong> of the Ouroboros language.
+                Every snippet is fully runnable and designed to work in isolation – copy, paste, run, tweak.
+                The order follows a natural learning progression but feel free to jump around.
+            </p>
+
+            <!-- VARIABLES & BASIC TYPES -->
+            <h3>1. Variables &amp; Basic Types</h3>
+            <pre><code class="language-ouroboros">// file: basics.ouro
+int    lives   = 3;          // 32-bit integer defaults to 0 if omitted
+long   bigNum  = 42_000L;    // 64-bit integer (underscores allowed)
+float  pi      = 3.14159;    // 32-bit float – decimal suffix optional
+bool   debug   = true;
+char   initial = 'J';
+string msg     = "Hello Ouroboros!";
+
+print(msg + "  π≈" + to_string(pi));</code></pre>
+
+            <!-- CONTROL FLOW -->
+            <h3>2. Conditionals</h3>
+            <pre><code class="language-ouroboros">function guess(int n) {
+    if (n &lt; 0) {
+        print("Too small!");
+    } else if (n &gt; 10) {
+        print("Too big!");
+    } else {
+        print("Just right ✨");
+    }
+}</code></pre>
+
+            <!-- LOOPS -->
+            <h3>3. Loops</h3>
+            <pre><code class="language-ouroboros">// while loop
+int i = 0;
+while (i &lt; 3) {
+    print("i = " + to_string(i));
+    i = i + 1;
+}
+
+// for-each style over arrays
+int numbers[] = {1,2,3,4,5};
+for (int n : numbers) {
+    if (n % 2 == 0) continue; // skip evens
+    print("odd -> " + to_string(n));
+}</code></pre>
+
+            <!-- FUNCTIONS -->
+            <h3>4. Functions (Free-standing &amp; Overloads)</h3>
+            <pre><code class="language-ouroboros">// Plain function
+int add(int a, int b) {
+    return a + b;
+}
+
+// Default parameters &amp; overloading
+float add(float a, float b = 0.0) {
+    return a + b;
+}
+
+print(to_string(add(2,3)));    // 5
+print(to_string(add(2.5, 1.5))); // 4.0
+print(to_string(add(7.5)));      // 7.5 (uses default)</code></pre>
+
+            <!-- MODULES & IMPORTS -->
+            <h3>5. Modules &amp; Imports</h3>
+            <pre><code class="language-ouroboros">// math_utils.ouro (module file)
+public int square(int x) { return x * x; }
+
+// main.ouro
+import "math_utils";
+
+function main() {
+    print("9² = " + to_string(square(9)));
+    return 0;
+}</code></pre>
+
+            <!-- ACCESS MODIFIERS / STATIC -->
+            <h3>6. Classes – Public, Private &amp; Static</h3>
+            <pre><code class="language-ouroboros">public class Counter {
+    private int value;           // visible only inside this class
+    public  static Counter singleton; // single shared instance
+
+    public void increment() {
+        this.value = this.value + 1;  // default initial value was 0
+    }
+
+    public int current() { return this.value; }
+}
+
+// Somewhere else …
+Counter.singleton.increment();
+print("Value = " + to_string(Counter.singleton.current()));</code></pre>
+
+            <!-- DATA STRUCTURES -->
+            <h3>7. Arrays, Maps &amp; Slices</h3>
+            <pre><code class="language-ouroboros">// Static length array literal
+int primes[5] = {2,3,5,7,11};
+
+// Dynamic array (vector) – grows automatically
+array&lt;string&gt; fruits;
+fruits.push("apple");
+fruits.push("banana");
+
+// Hash-map (dictionary)
+map&lt;string,int&gt; scoreboard;
+scoreboard["Alice"] = 42;
+scoreboard["Bob"]   = 17;
+
+print("Alice has " + to_string(scoreboard["Alice"]) + " points");</code></pre>
+
+            <!-- VECTORS & MATH -->
+            <h3>8. Built-in Maths Types</h3>
+            <pre><code class="language-ouroboros">Vector3 a = new Vector3(1,2,3);
+Vector3 b = new Vector3(4,5,6);
+
+Vector3 c = a + b;      // operator overload adds components
+float   len = c.length();
+print("|a+b| = " + to_string(len));</code></pre>
+
+            <!-- DEFAULT VALUES -->
+            <h3>9. Default-Value Semantics</h3>
+            <p>
+                Fields that you <em>do not</em> explicitly initialise receive safe defaults at compile-time: numbers → 0, floats → 0.0, bool → false, vectors → zero-vector.<br>
+                The snippet below shows the values printed without manual initialisation.
+            </p>
+            <pre><code class="language-ouroboros">class Demo {
+    int     i;      // 0
+    float   f;      // 0.0
+    bool    flag;   // false
+    Vector2 v;      // (0,0)
+
+    void show() {
+        print("i=" + to_string(i) + ", f=" + to_string(f) + ", flag=" + to_string(flag));
+        print("v = " + to_string(v));
+    }
+}
+
+function main() {
+    let d = new Demo();
+    d.show();
+    return 0;
+}</code></pre>
+
+            <!-- LIFECYCLE CALLBACKS -->
+            <h3>10. Game-Style Lifecycle</h3>
+            <p>The VM automatically calls <code>Awake</code>, <code>Start</code>, <code>Update</code>… methods if they exist.</p>
+            <pre><code class="language-ouroboros">public class Mover {
+    float x;
+    void Awake()  { print("Mover created"); }
+    void Start()  { print("Mover starts at " + to_string(x)); }
+    void Update() { x = x + 0.1; }
+}</code></pre>
+
+            <p>When you run the program the engine will:</p>
+            <ol>
+                <li>Create a <code>Mover</code> instance</li>
+                <li>Call <code>Awake</code> immediately</li>
+                <li>Call <code>Start</code> once before the frame loop</li>
+                <li>Invoke <code>Update</code> every frame</li>
+            </ol>
+        </section>
+
         <section id="vs-extension" class="section">
             <h2><i class="fas fa-plug"></i> Visual Studio Code Extension</h2>
             

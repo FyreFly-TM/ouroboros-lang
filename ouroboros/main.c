@@ -303,7 +303,6 @@ int main(int argc, char *argv[]) {
         }
         
         // Parsing
-        printf("\n==== Parsing ====\n");
         ast = parse(tokens);
         if (!ast) {
             fprintf(stderr, "Error: Parsing failed\n");

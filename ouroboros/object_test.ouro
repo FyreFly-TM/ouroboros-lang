@@ -1,0 +1,124 @@
+// Test file for the improved VM object system
+
+function main() {
+    print("=== Testing Object System ===");
+    
+    // Test object creation
+    let obj = new Object();
+    print("Created new object: " + obj);
+    
+    // Test property assignment
+    obj.name = "TestObject";
+    obj.value = 42;
+    obj.active = true;
+    
+    // Test property access
+    print("Object properties:");
+    print("  name: " + obj.name);
+    print("  value: " + obj.value);
+    print("  active: " + obj.active);
+    
+    // Test nested objects
+    let child = new Object();
+    child.id = 1;
+    child.description = "Child object";
+    
+    obj.child = child;
+    
+    print("Nested object properties:");
+    print("  child.id: " + obj.child.id);
+    print("  child.description: " + obj.child.description);
+    
+    // Test object as function parameter
+    testObjectFunction(obj);
+    
+    // Test returning an object from a function
+    let newObj = createTestObject("ReturnedObject", 100);
+    print("Function returned object with name: " + newObj.name + " and value: " + newObj.value);
+    
+    print("=== Object System Tests Completed ===");
+    
+    return 0;
+}
+
+// Function that takes an object as parameter
+function testObjectFunction(obj) {
+    print("In testObjectFunction, received object with name: " + obj.name);
+    
+    // Modify the object
+    obj.modified = true;
+    print("Modified the object, added property 'modified': " + obj.modified);
+    
+    return 0;
+}
+
+// Function that returns a new object
+function createTestObject(name, value) {
+    let obj = new Object();
+    obj.name = name;
+    obj.value = value;
+    
+    return obj;
+}
+
+// Test access modifiers in objects
+
+class TestClass {
+    // Constructor function
+    function TestClass() {
+        this.public_prop = "Public property";
+        private this.private_prop = "Private property";
+        static this.static_prop = "Static property";
+    }
+    
+    // Public method
+    function publicMethod() {
+        print("Public method called");
+        print("Can access private_prop: " + this.private_prop);
+        return "public method result";
+    }
+    
+    // Private method
+    private function privateMethod() {
+        print("Private method called");
+        return "private method result";
+    }
+    
+    // Method to test private access
+    function testPrivateAccess() {
+        print("Testing private access from inside the class");
+        return this.privateMethod();
+    }
+}
+
+// Main test function
+function main() {
+    print("Testing access modifiers");
+    
+    // Create instance of test class
+    var obj = new TestClass();
+    
+    // Test public property access
+    print("Public property: " + obj.public_prop);
+    
+    // Test private property access (should fail)
+    print("Trying to access private property...");
+    print("Private property: " + obj.private_prop);
+    
+    // Test static property access
+    print("Static property via class: " + TestClass.static_prop);
+    print("Static property via instance: " + obj.static_prop);
+    
+    // Test public method
+    print("Calling public method: " + obj.publicMethod());
+    
+    // Test private method (should fail)
+    print("Trying to call private method...");
+    var result = obj.privateMethod();
+    print("Private method result: " + result);
+    
+    // Test private access from inside the class
+    print("Testing private access through public method: " + obj.testPrivateAccess());
+    
+    print("Test complete");
+} 

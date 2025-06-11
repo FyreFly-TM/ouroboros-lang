@@ -1,0 +1,274 @@
+[STD] Registering built-in functions...
+[STD] Built-in functions registered.
+Compiling file: C:\\Users\\jacob\\Downloads\\OuroMath\\OuroMath\\main.ouro
+==== Lexical Analysis ====
+Token: Type=1, Text='import', Line=1, Col=1
+Token: Type=3, Text='urania', Line=1, Col=8
+Token: Type=6, Text=';', Line=1, Col=16
+Token: Type=1, Text='public', Line=3, Col=1
+Token: Type=1, Text='class', Line=3, Col=8
+Token: Type=0, Text='TestMain', Line=3, Col=14
+Token: Type=6, Text='{', Line=4, Col=1
+Token: Type=1, Text='public', Line=5, Col=5
+Token: Type=1, Text='static', Line=5, Col=12
+Token: Type=0, Text='TestMain', Line=5, Col=19
+Token: Type=0, Text='singleton', Line=5, Col=28
+Token: Type=6, Text=';', Line=5, Col=37
+Token: Type=1, Text='public', Line=7, Col=5
+Token: Type=1, Text='float', Line=7, Col=12
+Token: Type=0, Text='randomFloat', Line=7, Col=18
+Token: Type=5, Text='=', Line=7, Col=30
+Token: Type=2, Text='15.0', Line=7, Col=32
+Token: Type=6, Text=';', Line=7, Col=36
+Token: Type=1, Text='private', Line=8, Col=5
+Token: Type=1, Text='int', Line=8, Col=13
+Token: Type=0, Text='randomInt', Line=8, Col=17
+Token: Type=5, Text='=', Line=8, Col=27
+Token: Type=2, Text='1', Line=8, Col=29
+Token: Type=6, Text=';', Line=8, Col=30
+Token: Type=1, Text='public', Line=10, Col=5
+Token: Type=1, Text='void', Line=10, Col=12
+Token: Type=0, Text='Awake', Line=10, Col=17
+Token: Type=6, Text='(', Line=10, Col=22
+Token: Type=6, Text=')', Line=10, Col=23
+Token: Type=6, Text='{', Line=11, Col=5
+Token: Type=0, Text='singleton', Line=12, Col=9
+Token: Type=5, Text='=', Line=12, Col=19
+Token: Type=1, Text='this', Line=12, Col=21
+Token: Type=6, Text=';', Line=12, Col=25
+Token: Type=1, Text='print', Line=13, Col=9
+Token: Type=6, Text='(', Line=13, Col=14
+Token: Type=3, Text='This is the randomIntValue: ', Line=13, Col=15
+Token: Type=5, Text='+', Line=13, Col=46
+Token: Type=0, Text='randomInt', Line=13, Col=48
+Token: Type=6, Text=')', Line=13, Col=57
+Token: Type=6, Text=';', Line=13, Col=58
+Token: Type=6, Text='}', Line=14, Col=5
+Token: Type=6, Text='}', Line=15, Col=1
+Token: Type=1, Text='public', Line=17, Col=1
+Token: Type=1, Text='class', Line=17, Col=8
+Token: Type=0, Text='SecondClass', Line=17, Col=14
+Token: Type=6, Text='{', Line=18, Col=1
+Token: Type=1, Text='public', Line=19, Col=5
+Token: Type=1, Text='void', Line=19, Col=12
+Token: Type=0, Text='Start', Line=19, Col=17
+Token: Type=6, Text='(', Line=19, Col=22
+Token: Type=6, Text=')', Line=19, Col=23
+Token: Type=6, Text='{', Line=20, Col=5
+Token: Type=0, Text='testprivatevariable', Line=21, Col=9
+Token: Type=6, Text='(', Line=21, Col=28
+Token: Type=6, Text=')', Line=21, Col=29
+Token: Type=6, Text=';', Line=21, Col=30
+Token: Type=6, Text='}', Line=22, Col=5
+Token: Type=1, Text='public', Line=24, Col=5
+Token: Type=1, Text='void', Line=24, Col=12
+Token: Type=0, Text='testprivatevariable', Line=24, Col=17
+Token: Type=6, Text='(', Line=24, Col=36
+Token: Type=6, Text=')', Line=24, Col=37
+Token: Type=6, Text='{', Line=25, Col=5
+Token: Type=1, Text='print', Line=26, Col=9
+Token: Type=6, Text='(', Line=26, Col=14
+Token: Type=3, Text='from the second class: ', Line=26, Col=15
+Token: Type=5, Text='+', Line=26, Col=41
+Token: Type=0, Text='TestMain', Line=26, Col=43
+Token: Type=6, Text='.', Line=26, Col=51
+Token: Type=0, Text='singleton', Line=26, Col=52
+Token: Type=6, Text='.', Line=26, Col=61
+Token: Type=0, Text='randomFloat', Line=26, Col=62
+Token: Type=6, Text=')', Line=26, Col=73
+Token: Type=6, Text=';', Line=26, Col=74
+Token: Type=1, Text='print', Line=27, Col=9
+Token: Type=6, Text='(', Line=27, Col=14
+Token: Type=3, Text='from the second class | should be private: ', Line=27, Col=15
+Token: Type=6, Text=')', Line=27, Col=60
+Token: Type=6, Text=';', Line=27, Col=61
+Token: Type=6, Text='}', Line=28, Col=5
+Token: Type=6, Text='}', Line=29, Col=1
+
+==== Parsing ====
+
+==== Parsing ====
+
+==== Abstract Syntax Tree ====
+Program: program
+Left:
+  Import: urania
+  Next:
+    Class: TestMain
+    Left:
+      VarDecl: singleton (Type: TestMain)
+      Next:
+        VarDecl: randomFloat (Type: float)
+        Left:
+          Literal: 15.0
+        Next:
+          VarDecl: randomInt (Type: int)
+          Left:
+            Literal: 1
+          Next:
+            TypedFunction: Awake (Type: void)
+            Right:
+              Block: block
+              Left:
+                BinaryOp: =
+                Left:
+                  Identifier: singleton
+                Right:
+                  This: this
+                Next:
+                  Print: print
+                  Left:
+                    BinaryOp: +
+                    Left:
+                      Literal: This is the randomIntValue: 
+                    Right:
+                      Identifier: randomInt
+    Next:
+      Class: SecondClass
+      Left:
+        TypedFunction: Start (Type: void)
+        Right:
+          Block: block
+          Left:
+            Call: testprivatevariable
+        Next:
+          TypedFunction: testprivatevariable (Type: void)
+          Right:
+            Block: block
+            Left:
+              Print: print
+              Left:
+                BinaryOp: +
+                Left:
+                  Literal: from the second class: 
+                Right:
+                  MemberAccess: randomFloat
+                  Left:
+                    MemberAccess: singleton
+                    Left:
+                      Identifier: TestMain
+              Next:
+                Print: print
+                Left:
+                  Literal: from the second class | should be private: 
+
+==== Semantic Analysis ====
+[SEMANTIC] Starting semantic analysis...
+[SEMANTIC] Analyzing program
+[SEMANTIC] Unknown node type: 17
+[SEMANTIC] Analyzing class: TestMain
+[SEMANTIC] Analyzing class: SecondClass
+[SEMANTIC] Semantic analysis complete
+
+==== Program Output ====
+[MODULE] Loading module: urania from urania.ouro
+
+==== Parsing ====
+[SEMANTIC] Starting semantic analysis...
+[SEMANTIC] Analyzing program
+[SEMANTIC] Analyzing class: Vector
+[SEMANTIC] Semantic analysis complete
+[MODULE] Successfully loaded module: urania
+[VM] Registering class: TestMain
+[VM] Registering method: TestMain.Awake
+[VM] Registering class: SecondClass
+[VM] Registering method: SecondClass.Start
+[VM] Registering method: SecondClass.testprivatevariable
+[OBJECT] Created new object: Vector#1
+[OBJECT] Created new object: Vector_static#2
+[VM] Created static class object for Vector
+[ACCESS] Checking property 'singleton' on object Vector_static#2, accessing from class 'Vector'
+[VM] Auto-setting Vector.singleton = obj:1
+[PROPERTY] Setting public property 'singleton' to 'obj:1' on object Vector_static#2
+[PROPERTY] Created new property 'singleton' on object Vector_static#2
+[OBJECT] Created new object: TestMain#3
+[OBJECT] Created new object: TestMain_static#4
+[VM] Created static class object for TestMain
+[ACCESS] Checking property 'singleton' on object TestMain_static#4, accessing from class 'TestMain'
+[VM] Auto-setting TestMain.singleton = obj:3
+[PROPERTY] Setting public property 'singleton' to 'obj:3' on object TestMain_static#4
+[PROPERTY] Created new property 'singleton' on object TestMain_static#4
+[OBJECT] Created new object: SecondClass#5
+[OBJECT] Created new object: SecondClass_static#6
+[VM] Created static class object for SecondClass
+[ACCESS] Checking property 'singleton' on object SecondClass_static#6, accessing from class 'SecondClass'
+[VM] Auto-setting SecondClass.singleton = obj:5
+[PROPERTY] Setting public property 'singleton' to 'obj:5' on object SecondClass_static#6
+[PROPERTY] Created new property 'singleton' on object SecondClass_static#6
+[VM] Executing function call: obj:1.Awake
+[VM] Method call: Awake on object obj:1
+[VM] Looking for object with ID: 1
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Checking object: TestMain_static#4 (ID: 4)
+[VM] Checking object: TestMain#3 (ID: 3)
+[VM] Checking object: Vector_static#2 (ID: 2)
+[VM] Checking object: Vector#1 (ID: 1)
+[VM] Found object: obj:1, class: Vector
+[VM] Setting current class context: Vector
+[VM] Executing function call: obj:3.Awake
+[VM] Method call: Awake on object obj:3
+[VM] Looking for object with ID: 3
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Checking object: TestMain_static#4 (ID: 4)
+[VM] Checking object: TestMain#3 (ID: 3)
+[VM] Found object: obj:3, class: TestMain
+[VM] Setting current class context: TestMain
+[VM] Executing function call: obj:5.Awake
+[VM] Method call: Awake on object obj:5
+[VM] Looking for object with ID: 5
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Found object: obj:5, class: SecondClass
+[VM] Setting current class context: SecondClass
+[VM] Running global Start
+[VM] Executing function call: Start
+[VM] Executing function call: testprivatevariable
+[IDENT] Resolving identifier 'TestMain' (current_class=)
+[IDENT] Not a local variable; trying instance property on this
+[IDENT] Not an instance property; checking for class name heuristic
+[IDENT] Treating as class identifier (heuristic)
+[DEBUG] Accessing property singleton on object TestMain
+[DEBUG] Looking for property 'singleton' on static object of class 'TestMain'
+[ACCESS] Checking property 'singleton' on object TestMain_static#4, accessing from class ''
+[DEBUG] Accessing property randomFloat on object obj:3
+[DEBUG] Auto-initializing TestMain instance properties
+[PROPERTY] Setting public property 'randomFloat' to '15.0' on object TestMain#3
+[PROPERTY] Created new property 'randomFloat' on object TestMain#3
+[PROPERTY] Setting private property 'randomInt' to '1' on object TestMain#3
+[PROPERTY] Created new property 'randomInt' on object TestMain#3
+from the second class: 15.0
+from the second class | should be private: 
+[VM] Function call 'testprivatevariable' completed with result: 0
+[VM] Function call 'Start' completed with result: 0
+[VM] Executing function call: obj:1.Start
+[VM] Method call: Start on object obj:1
+[VM] Looking for object with ID: 1
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Checking object: TestMain_static#4 (ID: 4)
+[VM] Checking object: TestMain#3 (ID: 3)
+[VM] Checking object: Vector_static#2 (ID: 2)
+[VM] Checking object: Vector#1 (ID: 1)
+[VM] Found object: obj:1, class: Vector
+[VM] Setting current class context: Vector
+[VM] Executing function call: obj:3.Start
+[VM] Method call: Start on object obj:3
+[VM] Looking for object with ID: 3
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Checking object: TestMain_static#4 (ID: 4)
+[VM] Checking object: TestMain#3 (ID: 3)
+[VM] Found object: obj:3, class: TestMain
+[VM] Setting current class context: TestMain
+[VM] Executing function call: obj:5.Start
+[VM] Method call: Start on object obj:5
+[VM] Looking for object with ID: 5
+[VM] Checking object: SecondClass_static#6 (ID: 6)
+[VM] Checking object: SecondClass#5 (ID: 5)
+[VM] Found object: obj:5, class: SecondClass
+[VM] Setting current class context: SecondClass
+[VM] No lifecycle methods (Update/FixedUpdate/LateUpdate) found. Skipping frame loop.
+
+Compilation and execution completed successfully!

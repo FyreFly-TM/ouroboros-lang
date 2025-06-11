@@ -196,14 +196,25 @@ Module* module_load(const char *module_name) {
         return NULL;
     }
     
-    // Parse the source
+    /* Parse the source – but preserve the caller's global AST.  The parser
+       assigns to the global `program` variable, which we want to keep pointing
+       at the *main* compilation unit, not each imported module. */
+    extern ASTNode *program;   // declared in parser.c
+    ASTNode *prev_program = program;
+
     module->ast = parse(tokens);
+
+    /* Restore previous global AST so that later compilation stages (e.g.
+       field default-initialisation) can still see the main program's classes. */
     if (!module->ast) {
         fprintf(stderr, "Error: Failed to parse module %s\n", module_name);
         free(source);
+        program = prev_program; // make sure it's reset even on error
         return NULL;
     }
-    
+
+    program = prev_program;
+
     // Analyze the module
     analyze_program(module->ast);
     
