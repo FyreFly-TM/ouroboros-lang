@@ -211,10 +211,7 @@ void set_call_args(const char **args, int count) {
     call_args = args;
     call_arg_count = count;
     
-    printf("[STDLIB] Set call args with count: %d\n", count);
-    for (int i = 0; i < count; i++) {
-        printf("[STDLIB] Arg %d: %s\n", i, args[i] ? args[i] : "NULL");
-    }
+    /* Debug logging removed to reduce console noise during script execution */
 }
 
 // Function prototypes for wrappers
@@ -306,7 +303,10 @@ void register_function(const char *name, void (*func_ptr)(void), int arg_count) 
 }
 
 void register_stdlib_functions() {
-    printf("[STD] Registering built-in functions...\n");
+    printf("\n===================================\n");
+    printf("==== REGISTERING STD FUNCTIONS ====\n");
+    printf("===================================\n\n");
+    fflush(stdout);
     
     // Register core functions that are always available
     register_function("print", wrapper_print, 1);
@@ -392,7 +392,8 @@ void register_stdlib_functions() {
     register_function("loading_animation", wrapper_loading_animation, 1);
 #endif
     
-    printf("[STD] Built-in functions registered.\n");
+    printf("\n==== STD FUNCTIONS REGISTERED ====\n\n");
+    fflush(stdout);
 }
 
 int call_builtin_function_impl(const char *name, const char **args, int arg_count) {
@@ -422,12 +423,11 @@ int call_builtin_function_impl(const char *name, const char **args, int arg_coun
 
 // Print function wrapper
 void wrapper_print() {
-    printf("[PRINT] Print called with %d arguments\n", call_arg_count);
-    if (call_arg_count >= 1) {
-        // Just print the message to stdout
+    /* Simplified print wrapper: output only the user-provided message */
+    if (call_arg_count >= 1 && call_args[0]) {
         printf("%s\n", call_args[0]);
     } else {
-        printf("[PRINT] No arguments provided\n");
+        putchar('\n');
     }
 }
 
@@ -819,7 +819,8 @@ void wrapper_voxel_create_world_with_progress() {
         int seed = atoi(call_args[1]);
         int size = atoi(call_args[2]);
         
-        printf("[VOXEL] Creating world '%s' with progress tracking\n", world_name, seed, size);
+        // Corrected printf call
+        printf("[VOXEL] Creating world '%s' with progress tracking. Seed: %d, Size: %d\n", world_name, seed, size);
         
         // Step 1: Initialize
         draw_label("🌍 CREATING MASSIVE PROCEDURAL WORLD...");
@@ -1018,30 +1019,37 @@ void wrapper_loading_animation() {
 
 // === STRING UTILITY FUNCTIONS ===
 void wrapper_to_string() {
-    if (call_arg_count >= 1) {
-        const char *value = call_args[0];
-        printf("[STRING] Converting to string: %s\n", value);
-        // Value is already a string, just return it
+    if (call_arg_count >= 1 && call_args[0]) {
+        set_return_value(call_args[0]);
+        return;
     }
+    set_return_value("");
 }
 
 void wrapper_string_concat() {
     if (call_arg_count >= 2) {
-        const char *str1 = call_args[0];
-        const char *str2 = call_args[1];
-        printf("[STRING] Concatenating: '%s' + '%s'\n", str1, str2);
-        // In a real implementation, this would return the concatenated string
-        draw_label(str1);
-        draw_label(str2);
+        const char *str1 = call_args[0] ? call_args[0] : "";
+        const char *str2 = call_args[1] ? call_args[1] : "";
+        size_t len = strlen(str1) + strlen(str2);
+        char *buf = (char*)malloc(len + 1);
+        strcpy(buf, str1);
+        strcat(buf, str2);
+        set_return_value(buf);
+        free(buf);
+        return;
     }
+    set_return_value("");
 }
 
 void wrapper_string_length() {
     if (call_arg_count >= 1) {
-        const char *str = call_args[0];
-        int len = strlen(str);
-        printf("[STRING] Length of '%s': %d\n", str, len);
+        const char *str = call_args[0] ? call_args[0] : "";
+        char buf[32];
+        sprintf(buf, "%zu", strlen(str));
+        set_return_value(buf);
+        return;
     }
+    set_return_value("0");
 }
 
 // OpenGL wrapper implementations

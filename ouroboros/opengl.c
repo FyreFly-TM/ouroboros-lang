@@ -186,6 +186,7 @@ void opengl_set_uniform_vec4(unsigned int shader, const char* name, float x, flo
 }
 
 void opengl_set_uniform_mat4(unsigned int shader, const char* name, float* matrix) {
+    (void)matrix; // Mark as unused
     printf("[OPENGL] Setting uniform matrix '%s' in shader %u\n", name, shader);
 }
 
@@ -200,10 +201,13 @@ void opengl_bind_buffer(unsigned int buffer, int target) {
 }
 
 void opengl_buffer_data(int target, size_t size, void* data, int usage) {
+    (void)data; // Mark as unused
     printf("[OPENGL] Buffering %zu bytes of data to target 0x%x with usage 0x%x\n", size, target, usage);
 }
 
 unsigned int opengl_create_texture(int width, int height, unsigned char* data, int format) {
+    (void)data; // Mark as unused
+    (void)format; // Mark as unused
     static unsigned int texture_id = 1;
     printf("[OPENGL] Creating texture %u (%dx%d)\n", texture_id, width, height);
     return texture_id++;
@@ -235,6 +239,7 @@ void opengl_draw_arrays(int mode, int first, int count) {
 // These functions are already defined above
 
 void opengl_draw_elements(int mode, int count, int type, void* indices) {
+    (void)indices; // Mark as unused
     printf("[OPENGL] Drawing %d elements with mode 0x%x and type 0x%x\n", count, mode, type);
 }
 
@@ -281,6 +286,11 @@ void opengl_bind_vertex_array(unsigned int vao) {
 }
 
 void opengl_vertex_attrib_pointer(unsigned int index, int size, int type, int normalized, int stride, size_t offset) {
+    (void)size; // Mark as unused
+    (void)type; // Mark as unused
+    (void)normalized; // Mark as unused
+    (void)stride; // Mark as unused
+    (void)offset; // Mark as unused
     printf("[OPENGL] Setting vertex attribute %u\n", index);
 }
 
@@ -290,4 +300,4 @@ void opengl_enable_vertex_attrib_array(unsigned int index) {
 
 void opengl_set_uniform_int(unsigned int shader, const char* name, int value) {
     printf("[OPENGL] Setting uniform '%s' to %d in shader %u\n", name, value, shader);
-} 
+}

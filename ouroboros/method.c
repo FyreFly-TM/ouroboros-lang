@@ -38,6 +38,7 @@ ASTNode* find_method(const char *class_name, const char *method_name) {
 }
 
 void call_method(const char *class_name, const char *method_name, StackFrame *frame) {
+    (void)frame; // Mark parameter as unused
     ASTNode *body = find_method(class_name, method_name);
     if (!body) {
         printf("[METHOD] Not found: %s::%s\n", class_name, method_name);

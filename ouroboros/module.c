@@ -298,7 +298,7 @@ ASTNode* compile_multiple_files(char **filenames, int file_count) {
     }
     
     // Create a root program node
-    ASTNode *root = create_node(AST_PROGRAM, "program");
+    ASTNode *root = create_node(AST_PROGRAM, "program", 1, 1);
     ASTNode *last_func = NULL;
     
     // Load each file as a module
@@ -319,7 +319,7 @@ ASTNode* compile_multiple_files(char **filenames, int file_count) {
                 ASTNode *next = func->next;
                 
                 // Clone the function node to add to root
-                ASTNode *cloned = create_node(func->type, func->value);
+                ASTNode *cloned = create_node(func->type, func->value, func->line, func->col);
                 cloned->left = func->left;
                 cloned->right = func->right;
                 // Copy type information

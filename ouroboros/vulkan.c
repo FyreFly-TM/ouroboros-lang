@@ -164,6 +164,7 @@ int vulkan_create_logical_device() {
 }
 
 int vulkan_create_surface(void* window_handle, int window_system) {
+    (void)window_handle; // Mark as unused
     if (!g_instance_created) {
         printf("[VULKAN] Error: Instance not created\n");
         return 0;
@@ -271,6 +272,7 @@ int vulkan_create_graphics_pipeline(const char* vertex_shader, const char* fragm
 }
 
 int vulkan_create_vertex_buffer(void* vertices, size_t size) {
+    (void)vertices; // Mark as unused
     if (!g_device_created) {
         printf("[VULKAN] Error: Device not created\n");
         return 0;

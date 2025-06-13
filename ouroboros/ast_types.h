@@ -36,6 +36,11 @@ typedef enum {
     AST_CLASS_FIELD,      // New: class field
     AST_PRINT,            // Print statement
     AST_INDEX_ACCESS,     // Array index access
+    AST_MAP,              // Map literal {key: value}
+    AST_TERNARY,          // Ternary conditional ?: operator
+    AST_BREAK,            // loop control: break
+    AST_CONTINUE,         // loop control: continue
+    AST_SUPER,            // 'super' reference inside classes
     AST_UNKNOWN           // Unknown node type
 } ASTNodeType;
 

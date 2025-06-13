@@ -108,8 +108,11 @@ int main(int argc, char *argv[]) {
 
     // --- Optimization ---
     if (!no_optimize_flag) {
-        printf("\n==== Optimization Pass ====\n");
+        printf("\n\n===============================\n");
+        printf("==== OPTIMIZATION STARTING ====\n");
+        printf("===============================\n\n");
         optimize_ast(ast_root);
+        printf("\n==== OPTIMIZATION COMPLETE ====\n\n");
         if (print_ast_flag) {
             printf("\n==== Abstract Syntax Tree (After Optimization) ====\n");
             print_ast(ast_root, 0);

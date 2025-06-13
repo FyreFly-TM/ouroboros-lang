@@ -70,7 +70,7 @@ static void skip_whitespace_and_comments_string() {
 
 
 static int is_lexer_symbol(int c) {
-    return strchr("(){}[];,:.<>", c) != NULL;
+    return strchr("(){}[];,:.<>?", c) != NULL;
 }
 
 static int is_lexer_operator_char_start(int c) { // Chars that can start an operator
@@ -82,11 +82,16 @@ static const char *keywords[] = {
     "let", "const", "var", "function", "return", "if", "else", "while", "for", 
     "true", "false", "null",
     "class", "new", "this", "extends", "static", 
+    "super", "fn", 
+    "break", "continue",
     "public", "private", // "protected" could be added
     "import", "print", 
     "struct",
+    "constructor", // Added constructor keyword
     // Built-in types are also keywords to the lexer to distinguish from identifiers
-    "int", "float", "bool", "string", "void", "any", "array", "object" 
+    "int", "long", "float", "double", "bool", "string", "char", "void", "any", "array", "object", "map", 
+    "as", "in", "is",
+    "func", // Alias for function keyword
 };
 
 static int is_lexer_keyword(const char *text) {
@@ -199,17 +204,83 @@ static Token get_next_token_from_string() {
         tok.text[i] = '\0';
         if (c != '"') { /* Unterminated string */ }
         tok.type = TOKEN_STRING;
+    } else if (c == '\'') { // Character literals
+        int i = 0;
+        current_col_lex++; // For opening quote
+        c = string_getc_lex();
+        if (c == EOF) {
+            fprintf(stderr, "Lexer Error (L%d:%d): Unterminated character literal.\n", tok.line, tok.col);
+            tok.type = TOKEN_UNKNOWN;
+            return tok;
+        }
+        current_col_lex++;
+        if (c == '\\') { // Escape sequence
+            int next_char = string_getc_lex();
+            current_col_lex++;
+            if (next_char == EOF) {
+                fprintf(stderr, "Lexer Error (L%d:%d): Unterminated escape in character literal.\n", tok.line, tok.col);
+                tok.type = TOKEN_UNKNOWN;
+                return tok;
+            }
+            switch (next_char) {
+                case 'n': tok.text[i++] = '\n'; break;
+                case 't': tok.text[i++] = '\t'; break;
+                case 'r': tok.text[i++] = '\r'; break;
+                case '\\': tok.text[i++] = '\\'; break;
+                case '\'': tok.text[i++] = '\''; break;
+                default: tok.text[i++] = next_char; break;
+            }
+        } else {
+            tok.text[i++] = c;
+        }
+        tok.text[i] = '\0';
+        
+        c = string_getc_lex();
+        if (c != '\'') {
+            fprintf(stderr, "Lexer Error (L%d:%d): Expected closing single quote for character literal.\n", tok.line, tok.col);
+            tok.type = TOKEN_UNKNOWN;
+            return tok;
+        }
+        current_col_lex++;
+        tok.type = TOKEN_STRING; // We'll use TOKEN_STRING for char literals too
     } else if (is_lexer_operator_char_start(c)) { // Operators
         int i = 0;
         tok.text[i++] = c;
         current_col_lex++;
-        // Check for multi-character operators like ==, !=, <=, >=, &&, ||
+        /* Extended multi-character operator support */
         char next_c = string_peek_lex();
-        if ((c == '=' && next_c == '=') || (c == '!' && next_c == '=') ||
-            (c == '<' && next_c == '=') || (c == '>' && next_c == '=') ||
-            (c == '&' && next_c == '&') || (c == '|' && next_c == '|')) {
-            if (i < (int)sizeof(tok.text) - 1) tok.text[i++] = string_getc_lex();
-            current_col_lex++;
+        char next2_c = '\0';
+        if (next_c != EOF) {
+            /* Temporarily consume to peek two chars ahead */
+            string_getc_lex();
+            next2_c = string_peek_lex();
+            string_ungetc_lex();
+        }
+
+        int consumed_additional = 0;
+
+        /* 3-character operators – currently only >>> */
+        if (c == '>' && next_c == '>' && next2_c == '>') {
+            if (i < (int)sizeof(tok.text) - 1) { tok.text[i++] = string_getc_lex(); current_col_lex++; }
+            if (i < (int)sizeof(tok.text) - 1) { tok.text[i++] = string_getc_lex(); current_col_lex++; }
+            consumed_additional = 1;
+        }
+
+        /* 2-character operators */
+        if (!consumed_additional) {
+            if ((c == '+' && (next_c == '+' || next_c == '=')) ||
+                (c == '-' && (next_c == '-' || next_c == '=')) ||
+                (c == '*' && next_c == '=') ||
+                (c == '/' && next_c == '=') ||
+                (c == '%' && next_c == '=') ||
+                (c == '=' && next_c == '=') ||
+                (c == '!' && next_c == '=') ||
+                (c == '<' && (next_c == '=' || next_c == '<')) ||
+                (c == '>' && (next_c == '=' || next_c == '>')) ||
+                (c == '&' && next_c == '&') ||
+                (c == '|' && next_c == '|')) {
+                if (i < (int)sizeof(tok.text) - 1) { tok.text[i++] = string_getc_lex(); current_col_lex++; }
+            }
         }
         tok.text[i] = '\0';
         tok.type = TOKEN_OPERATOR;

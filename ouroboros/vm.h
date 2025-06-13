@@ -6,11 +6,10 @@
 
 // Property access modifiers (can be used by AST or VM internals if needed)
 typedef enum {
-    ACCESS_PUBLIC,
-    ACCESS_PRIVATE
-    // Note: 'static' is usually a characteristic, not an access modifier like public/private.
-    // A member can be 'static public' or 'static private'.
-} AccessModifierEnum; // Renamed to avoid conflict if AccessModifier is a struct/typedef elsewhere
+    ACCESS_MODIFIER_PUBLIC,
+    ACCESS_MODIFIER_PRIVATE,
+    ACCESS_MODIFIER_PROTECTED
+} AccessModifierEnum;
 
 // Object property structure
 typedef struct ObjectProperty {
@@ -58,7 +57,7 @@ const char* get_object_property_with_access(Object *obj, const char *property_na
 
 
 // VM execution
-const char* execute_function_call(const char *qualified_name, ASTNode *args_ast_list, StackFrame *caller_frame);
+const char* execute_function_call(const char* qualified_name, ASTNode* args_ast_list, StackFrame* caller_frame);
 void run_vm_node(ASTNode *node, StackFrame *frame);
 void run_vm(ASTNode *root_ast_node);
 
@@ -66,9 +65,14 @@ void run_vm(ASTNode *root_ast_node);
 const char* get_return_value();
 void set_return_value(const char* value);
 
+// Class method resolution
+ASTNode* find_class_method(const char *class_name, const char *method_name);
+
 // Bridge to stdlib built-in functions (defined in stdlib.c)
 // Arguments: func_name, list of ASTNodes for args, frame to evaluate args in.
 const char* call_built_in_function(const char* func_name_to_call, ASTNode* args_ast_list, StackFrame* frame_for_evaluating_args);
 
+// Add prototype for get_parent_class_name
+const char* get_parent_class_name(const char *class_name);
 
 #endif // VM_H

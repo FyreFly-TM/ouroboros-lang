@@ -10,6 +10,7 @@ void* thread_entry(void *arg) {
 }
 
 void start_thread(void (*fn)(void *), void *arg) {
+    (void)arg; // Mark parameter as unused
     pthread_t thread;
     void **data = malloc(sizeof(void *));
     *data = fn;
